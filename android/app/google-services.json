@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "607840749804",
+    "project_id": "eventos-app-f3141",
+    "storage_bucket": "eventos-app-f3141.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:607840749804:android:f8b7243e4c243966157dc9",
+        "android_client_info": {
+          "package_name": "com.u2m.eventos_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMQ9sInCIjCJGj-fZdEPBkNmSLpiqhvvM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
