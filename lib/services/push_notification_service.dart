@@ -6,25 +6,39 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:eventos_app/services/local_notification_service.dart';
 
+/// Serviço centralizado para gerenciamento de notificações push (Firebase Messaging) e navegação por notificações.
+///
+/// Responsabilidades:
+/// - Inicializar o Firebase Messaging e solicitar permissões.
+/// - Salvar e atualizar o token do dispositivo no Firestore.
+/// - Registrar handlers para notificações em foreground, background e quando o app é aberto por uma notificação.
+/// - Exibir notificações locais quando necessário.
+/// - Navegar para rotas específicas ao clicar em notificações.
 class PushNotificationService {
-  // 1. Adicionamos a GlobalKey para controlar a navegação
+  /// Chave global para navegação via notificações.
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
-  /// Inicializa o Firebase Messaging e salva o token no Firestore
+  /// Inicializa o serviço de notificações push e registra todos os listeners necessários.
+  ///
+  /// - Solicita permissão no iOS.
+  /// - Salva o token do dispositivo no Firestore.
+  /// - Registra listeners para atualização de token, recebimento de notificações em foreground/background,
+  ///   e navegação ao clicar em notificações.
+  /// - Emuladores não recebem push, apenas exibem mensagem de teste.
   static Future<void> initialize(BuildContext context) async {
-    // Inicialize o serviço de notificações locais
+    // Inicializa o serviço de notificações locais (exibe notificações no foreground)
     LocalNotificationService.initialize();
 
     final messaging = FirebaseMessaging.instance;
 
+    // Solicita permissão para notificações no iOS
     if (Platform.isIOS) {
       final settings = await messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
-
       if (settings.authorizationStatus != AuthorizationStatus.authorized) {
         print('❌ Permissão negada no iOS');
         return;
@@ -34,6 +48,7 @@ class PushNotificationService {
       print('✅ Permissão automática no Android');
     }
 
+    // Detecta se está rodando em emulador/simulador
     final isSimulator = await _isEmulator();
     if (isSimulator) {
       print('🧪 Rodando em simulador – SnackBar será usado no lugar de push.');
@@ -43,19 +58,20 @@ class PushNotificationService {
       return;
     }
 
+    // Obtém e salva o token do dispositivo
     final token = await messaging.getToken();
     print('🔐 Token do dispositivo: $token');
-
     if (token != null) {
       await _saveTokenToFirestore(token);
     }
 
+    // Atualiza o token no Firestore quando ele muda
     messaging.onTokenRefresh.listen((newToken) async {
       print('♻️ Token atualizado: $newToken');
       await _saveTokenToFirestore(newToken);
     });
 
-    // 2. Handler para quando o app é aberto a partir do estado TERMINADO
+    // Handler para quando o app é aberto a partir do estado TERMINADO por uma notificação
     FirebaseMessaging.instance.getInitialMessage().then((message) {
       if (message != null) {
         print('📱 App aberto do estado terminado pela notificação');
@@ -63,24 +79,24 @@ class PushNotificationService {
       }
     });
 
+    // Handler para notificações recebidas em primeiro plano
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       print('📲 Mensagem em primeiro plano: ${message.notification?.title}');
-
-      // AQUI ESTÁ A MUDANÇA:
-      // Em vez de apenas imprimir, agora exibimos uma notificação local.
-      if (message.notification != null) {
+      // Só exibe notificação local se não houver campo 'notification' (evita duplicidade)
+      if (message.notification == null) {
         LocalNotificationService.display(message);
       }
     });
 
-    // 3. Handler para quando o app é aberto a partir do estado de BACKGROUND
+    // Handler para quando o app é aberto a partir do estado de BACKGROUND por uma notificação
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       print('🚀 App aberto do estado de background pela notificação');
       _handleNotificationClick(message);
     });
   }
 
-  /// Verifica se está rodando em simulador/emulador
+  /// Verifica se está rodando em simulador/emulador.
+  /// Retorna true se não for dispositivo físico.
   static Future<bool> _isEmulator() async {
     final deviceInfo = DeviceInfoPlugin();
     if (Platform.isAndroid) {
@@ -93,7 +109,9 @@ class PushNotificationService {
     return false;
   }
 
-  /// Salva o token na coleção 'device_tokens'
+  /// Salva o token do dispositivo na coleção 'device_tokens' do Firestore.
+  ///
+  /// Permite identificar e enviar notificações para dispositivos específicos.
   static Future<void> _saveTokenToFirestore(String token) async {
     final tokensCollection =
         FirebaseFirestore.instance.collection('device_tokens');
@@ -105,23 +123,25 @@ class PushNotificationService {
     print('✅ Token salvo no Firestore');
   }
 
-  /// Handler de background: precisa ser registrado no main()
+  /// Handler de background para notificações push.
+  ///
+  /// Deve ser registrado no main() para garantir que notificações sejam processadas quando o app está fechado.
   static Future<void> backgroundHandler(RemoteMessage message) async {
     await Firebase.initializeApp();
     print('📩 [Background] Mensagem: ${message.messageId}');
   }
 
-  /// 4. Método centralizado para lidar com a navegação ao clicar na notificação
+  /// Lida com a navegação ao clicar em uma notificação push.
+  ///
+  /// Extrai a rota do campo 'data' do payload da notificação e navega para ela usando a chave global.
+  /// Exemplo de payload:
+  /// {
+  ///   "notification": {"title": "...", "body": "..."},
+  ///   "data": { "route": "/detalhes_evento", "id": "123" }
+  /// }
   static void _handleNotificationClick(RemoteMessage message) {
-    // Extrai a rota do campo 'data' da notificação.
-    // Exemplo de payload que você enviaria:
-    // {
-    //   "notification": {"title": "...", "body": "..."},
-    //   "data": { "route": "/detalhes_evento", "id": "123" }
-    // }
     final String? route = message.data['route'];
     if (route != null) {
-      // Usa a chave global para navegar para a rota especificada
       navigatorKey.currentState?.pushNamed(route, arguments: message.data);
     }
   }
