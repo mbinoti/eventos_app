@@ -55,4 +55,21 @@ class Event {
       'imageUrl': imageUrl,
     };
   }
+
+  Event copyWith({
+    String? id,
+    String? name,
+    String? location,
+    DateTime? date,
+    String? imageUrl,
+  }) {
+    return Event(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      location: location ?? this.location,
+      date: date ?? this.date,
+      imageUrl: imageUrl ?? this.imageUrl,
+      description: '',
+    );
+  }
 }

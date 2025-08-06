@@ -17,10 +17,11 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
   final _formKey = GlobalKey<FormState>();
   final _tituloController = TextEditingController();
   final _cidadeController = TextEditingController();
+  final _comentariosController = TextEditingController();
   DateTime? _dataEvento;
   List<File> _imagensSelecionadas = [];
-  final _comentariosController = TextEditingController();
 
+  /// Abre o seletor de imagens e adiciona ao estado
   Future<void> _selecionarImagens() async {
     final picker = ImagePicker();
     final pickedFiles = await picker.pickMultiImage();
@@ -35,6 +36,7 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
     }
   }
 
+  /// Envia os dados para o Cubit de cadastro
   void _submitForm(BuildContext context) {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -62,6 +64,7 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
           cidade: _cidadeController.text.trim(),
           dataEvento: _dataEvento!,
           imagens: _imagensSelecionadas,
+          // comentarios: _comentariosController.text.trim(),
         );
   }
 
@@ -70,10 +73,11 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
     return BlocListener<CadastroEventoCubit, CadastroEventoState>(
       listener: (context, state) {
         if (state is CadastroEventoSucesso) {
-          Navigator.pop(context);
+          Navigator.pop(context, true); // IMPORTANTE!
         } else if (state is CadastroEventoErro) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text('Erro: ${state.mensagem}')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro: ${state.mensagem}')),
+          );
         }
       },
       child: Scaffold(
@@ -91,15 +95,17 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                     TextFormField(
                       controller: _tituloController,
                       decoration: const InputDecoration(labelText: 'Título'),
-                      validator: (value) =>
-                          value!.isEmpty ? 'Informe o título' : null,
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Informe o título'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _cidadeController,
                       decoration: const InputDecoration(labelText: 'Cidade'),
-                      validator: (value) =>
-                          value!.isEmpty ? 'Informe a cidade' : null,
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Informe a cidade'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -128,6 +134,8 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
+
+                    // Imagens selecionadas
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -138,8 +146,12 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                         return Stack(
                           alignment: Alignment.topRight,
                           children: [
-                            Image.file(file,
-                                width: 100, height: 100, fit: BoxFit.cover),
+                            Image.file(
+                              file,
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            ),
                             Positioned(
                               top: -8,
                               right: -8,
@@ -162,9 +174,12 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                       icon: const Icon(Icons.image),
                       label: const Text('Selecionar Imagens'),
                     ),
-                    const SizedBox(height: 10),
+
+                    const SizedBox(height: 12),
+
+                    // Comentários
                     ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: 200),
+                      constraints: const BoxConstraints(maxHeight: 200),
                       child: Scrollbar(
                         child: SingleChildScrollView(
                           child: TextFormField(
@@ -173,14 +188,16 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                             maxLines: null,
                             minLines: 3,
                             decoration: const InputDecoration(
-                              labelText: 'Comentários',
+                              labelText: 'Comentários (opcional)',
                               border: OutlineInputBorder(),
                             ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
+
+                    const SizedBox(height: 20),
+
                     carregando
                         ? const CircularProgressIndicator()
                         : ElevatedButton.icon(

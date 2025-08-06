@@ -1,19 +1,51 @@
 import 'package:flutter/material.dart';
-
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-
 import '../../pages/screens/event_feed_screen.dart';
 
-class MainNavigationScreen extends StatefulWidget {
+/// Tela principal de navegação da aplicação.
+///
+/// Exibe as principais abas do app: feed de eventos, agenda e promoções.
+/// Recebe [isAdmin] para definir permissões administrativas nas telas filhas.
+class MainNavigationScreen extends StatelessWidget {
+  /// Indica se o usuário é administrador.
+  final bool isAdmin;
+
+  /// Construtor do [MainNavigationScreen].
+  const MainNavigationScreen({Key? key, required this.isAdmin})
+      : super(key: key);
+
   @override
-  _MainNavigationScreenState createState() => _MainNavigationScreenState();
+  Widget build(BuildContext context) {
+    return _MainNavigationScreen(isAdmin: isAdmin);
+  }
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+/// Widget de estado para a navegação principal.
+///
+/// Responsável por controlar a navegação entre as abas e manter o estado selecionado.
+/// Recebe [isAdmin] para repassar às telas filhas.
+class _MainNavigationScreen extends StatefulWidget {
+  /// Indica se o usuário é administrador.
+  final bool isAdmin;
+
+  /// Construtor do [_MainNavigationScreen].
+  const _MainNavigationScreen({Key? key, required this.isAdmin})
+      : super(key: key);
+
+  @override
+  __MainNavigationScreenState createState() => __MainNavigationScreenState();
+}
+
+/// Estado do widget [_MainNavigationScreen].
+///
+/// Gerencia o índice da aba selecionada e exibe o conteúdo correspondente.
+class __MainNavigationScreenState extends State<_MainNavigationScreen> {
+  /// Índice da aba atualmente selecionada.
   int _selectedIndex = 0;
 
-  final List<Widget> _screens = [
-    EventFeedScreen(isAdmin: true), // ajuste se precisar passar parâmetro
+  /// Lista de telas exibidas nas abas.
+  late final List<Widget> _screens = [
+    EventFeedScreen(isAdmin: widget.isAdmin),
     CalendarScreen(),
     PromotionsScreen(),
   ];
@@ -61,6 +93,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 }
 
+/// Tela da agenda de eventos.
+///
+/// Exibe o conteúdo relacionado à agenda.
 class CalendarScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -71,6 +106,9 @@ class CalendarScreen extends StatelessWidget {
   }
 }
 
+/// Tela de promoções.
+///
+/// Exibe o conteúdo relacionado às promoções.
 class PromotionsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

@@ -8,7 +8,7 @@ class EventRepository {
     try {
       final snapshot = await _firestore
           .collection('eventos')
-          .orderBy('dataEvento', descending: true)
+          .orderBy('dataEvento', descending: false)
           .get();
 
       print('Snapshot retornado, quantidade de docs: ${snapshot.docs.length}');
@@ -36,7 +36,7 @@ class EventRepository {
 
   Future<void> addEvent(Event event) async {
     try {
-      await _firestore.collection('events').add(event.toMap());
+      await _firestore.collection('eventos').add(event.toMap());
     } catch (e) {
       print(e);
     }
@@ -44,7 +44,10 @@ class EventRepository {
 
   Future<void> updateEvent(Event event) async {
     try {
-      await _firestore.collection('events').doc(event.id).update(event.toMap());
+      await _firestore
+          .collection('eventos')
+          .doc(event.id)
+          .update(event.toMap());
     } catch (e) {
       print(e);
     }
@@ -52,9 +55,16 @@ class EventRepository {
 
   Future<void> deleteEvent(String id) async {
     try {
-      await _firestore.collection('events').doc(id).delete();
+      print('Tentando deletar evento com id: $id');
+      final doc = await _firestore.collection('eventos').doc(id).get();
+      if (!doc.exists) {
+        print('Documento não existe!');
+        return;
+      }
+      await _firestore.collection('eventos').doc(id).delete();
+      print('Evento deletado!');
     } catch (e) {
-      print(e);
+      print('Erro ao deletar: $e');
     }
   }
 }

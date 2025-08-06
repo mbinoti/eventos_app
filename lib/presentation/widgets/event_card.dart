@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../models/event.dart';
 import '../../repositories/event_repository.dart';
+import '../cubits/event_feed/event_feed_cubit.dart';
 
 /// Um card de evento clicável que exibe os detalhes básicos do evento e permite ações como compartilhar, excluir e favoritar.
 class EventCard extends StatefulWidget {
@@ -95,6 +97,9 @@ Confira mais no app Eventos Locais!
                           if (confirm == true) {
                             await widget.repository
                                 .deleteEvent(widget.evento.id);
+                            // Atualiza o feed após deletar
+                            final cubit = context.read<EventFeedCubit>();
+                            cubit.loadEvents();
                           }
                         },
                       ),
