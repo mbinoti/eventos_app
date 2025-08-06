@@ -98,3 +98,32 @@ class _MainAppState extends State<MainApp> {
     );
   }
 }
+
+/// ---------------------------------------------------------------------------
+///
+/// # Como o gerenciamento de estado é utilizado neste projeto
+///
+/// Este projeto utiliza o padrão Cubit do pacote [flutter_bloc] para gerenciar o estado da aplicação.
+/// Abaixo estão os principais pontos sobre o uso do gerenciamento de estado:
+///
+/// - **EventFeedCubit**: Gerencia o estado do feed de eventos, controlando o carregamento, sucesso, erro e lista vazia.
+///   Os widgets escutam as mudanças de estado usando `BlocBuilder<EventFeedCubit, EventFeedState>`.
+///
+/// - **CadastroEventoCubit**: Gerencia o estado do cadastro de novos eventos, controlando o progresso, sucesso e erro do cadastro.
+///   Utilizado nas telas de cadastro para mostrar carregamento, sucesso ou erro conforme o estado.
+///
+/// - **ThemeCubit**: Gerencia o tema do app (claro/escuro). O widget principal (`MainApp`) utiliza `BlocBuilder<ThemeCubit, ThemeMode>`
+///   para alternar dinamicamente o tema da aplicação.
+///
+/// ## Funcionamento
+/// - Os Cubits são criados no início do app usando `MultiBlocProvider`.
+/// - Os widgets escutam as mudanças de estado usando `BlocBuilder` ou `BlocListener`.
+/// - Quando uma ação ocorre (ex: carregar eventos, cadastrar evento), um método do Cubit é chamado e um novo estado é emitido.
+/// - A interface é reconstruída automaticamente de acordo com o novo estado.
+///
+/// ## Vantagens
+/// - Organização: Lógica de negócio separada da interface.
+/// - Reatividade: UI sempre sincronizada com o estado.
+/// - Testabilidade: Fácil de testar a lógica dos Cubits separadamente.
+///
+/// Para mais detalhes, consulte a documentação dos próprios Cubits e States no

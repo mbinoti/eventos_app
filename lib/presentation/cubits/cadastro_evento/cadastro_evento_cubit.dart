@@ -5,11 +5,26 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../repositories/storage_repository.dart';
 import 'cadastro_evento_state.dart';
 
+/// Cubit responsável pelo gerenciamento do estado do cadastro de eventos.
+///
+/// Utiliza um [StorageRepository] para salvar os dados do evento.
+/// Os estados possíveis são:
+/// - [CadastroEventoInitial]: estado inicial.
+/// - [CadastroEventoLoading]: cadastro em andamento.
+/// - [CadastroEventoSuccess]: cadastro realizado com sucesso.
+/// - [CadastroEventoError]: erro ao cadastrar evento.
 class CadastroEventoCubit extends Cubit<CadastroEventoState> {
-  final StorageRepository storage;
+  /// Repositório de armazenamento utilizado para salvar eventos.
+  final StorageRepository repository;
 
-  CadastroEventoCubit(this.storage) : super(CadastroEventoInitial());
+  /// Construtor do [CadastroEventoCubit].
+  CadastroEventoCubit(this.repository) : super(CadastroEventoInitial());
 
+  /// Realiza o cadastro de um novo evento.
+  ///
+  /// Emite [CadastroEventoLoading] durante o processo,
+  /// [CadastroEventoSuccess] em caso de sucesso,
+  /// ou [CadastroEventoError] em caso de falha.
   Future<void> cadastrarEvento({
     required String titulo,
     required String cidade,
@@ -23,7 +38,7 @@ class CadastroEventoCubit extends Cubit<CadastroEventoState> {
       List<String> urls = [];
 
       for (final imagem in imagens) {
-        final url = await storage.uploadImagemComSeguranca(imagem);
+        final url = await repository.uploadImagemComSeguranca(imagem);
         urls.add(url);
         print('✅ Upload concluído: $url');
       }
