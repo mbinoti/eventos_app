@@ -1,3 +1,4 @@
+import 'package:eventos_app/services/env.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../pages/screens/event_feed_screen.dart';
@@ -53,6 +54,12 @@ class __MainNavigationScreenState extends State<_MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // appBar: AppBar(
+      //   title: Text(
+      //     'FLAVOR: ${Env.flavor.toUpperCase()} • Emuladores: ${Env.useFirebaseEmulators ? 'ON' : 'OFF'}',
+      //   ),
+      //   centerTitle: true,
+      // ),
       body: IndexedStack(
         index: _selectedIndex,
         children: _screens,
