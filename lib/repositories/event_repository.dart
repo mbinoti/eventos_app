@@ -42,6 +42,29 @@ class EventRepository {
     }
   }
 
+  Future<void> createEvent({
+    required String titulo,
+    required String cidade,
+    required DateTime dataEvento,
+    required List<String> imagemUrls,
+    String? descricao,
+  }) async {
+    try {
+      await _firestore.collection('eventos').add({
+        'titulo': titulo,
+        'cidade': cidade,
+        'imagemUrls': imagemUrls,
+        'descricao': descricao ?? '',
+        'dataEvento': dataEvento,
+        'criadoEm': DateTime.now(),
+        'curtidas': 0,
+      });
+    } catch (e) {
+      print(e);
+      rethrow;
+    }
+  }
+
   Future<void> updateEvent(Event event) async {
     try {
       await _firestore

@@ -7,6 +7,7 @@ class Event {
   final DateTime date;
   final String location;
   final String imageUrl;
+  final int likesCount;
 
   Event({
     required this.id,
@@ -15,6 +16,7 @@ class Event {
     required this.date,
     required this.location,
     required this.imageUrl,
+    this.likesCount = 0,
   });
 
   factory Event.fromFirestore(DocumentSnapshot doc) {
@@ -36,23 +38,29 @@ class Event {
     } else if (data['imagemUrls'] is String) {
       imageUrl = data['imagemUrls'];
     }
+    final rawLikes = data['curtidas'];
+    final likesCount = rawLikes is num ? rawLikes.toInt() : 0;
+    final descricao =
+        (data['descricao'] ?? data['description'] ?? '').toString();
     return Event(
       id: doc.id,
       name: data['titulo'] ?? '',
-      description: '',
+      description: descricao,
       date: date,
       location: data['cidade'] ?? '',
       imageUrl: imageUrl,
+      likesCount: likesCount,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'name': name,
-      'description': description,
-      'date': date,
-      'location': location,
-      'imageUrl': imageUrl,
+      'titulo': name,
+      'descricao': description,
+      'dataEvento': date,
+      'cidade': location,
+      'imagemUrls': imageUrl.isEmpty ? <String>[] : [imageUrl],
+      'curtidas': likesCount,
     };
   }
 
@@ -62,6 +70,7 @@ class Event {
     String? location,
     DateTime? date,
     String? imageUrl,
+    int? likesCount,
   }) {
     return Event(
       id: id ?? this.id,
@@ -69,6 +78,7 @@ class Event {
       location: location ?? this.location,
       date: date ?? this.date,
       imageUrl: imageUrl ?? this.imageUrl,
+      likesCount: likesCount ?? this.likesCount,
       description: '',
     );
   }

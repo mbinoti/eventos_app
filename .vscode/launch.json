@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Flutter (dev • emuladores ON)",
+            "name": "Flutter (dev • usuario)",
             "request": "launch",
             "type": "dart",
             "program": "lib/main.dart",
@@ -10,7 +10,23 @@
                 "--dart-define",
                 "FLAVOR=dev",
                 "--dart-define",
-                "USE_FIREBASE_EMULATORS=true"
+                "USE_FIREBASE_EMULATORS=true",
+                "--dart-define",
+                "ADMIN_MODE=user"
+            ]
+        },
+        {
+            "name": "Flutter (dev • admin)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--dart-define",
+                "FLAVOR=dev",
+                "--dart-define",
+                "USE_FIREBASE_EMULATORS=true",
+                "--dart-define",
+                "ADMIN_MODE=admin"
             ]
         },
         {

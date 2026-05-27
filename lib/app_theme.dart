@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static final ThemeData darkTheme = ThemeData.dark().copyWith(
+  static final ThemeData darkTheme = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
     scaffoldBackgroundColor: Colors.black,
     cardColor: const Color(0xFF121212),
-    colorScheme: ColorScheme.fromSwatch(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: Colors.blueGrey,
       brightness: Brightness.dark,
-      primarySwatch: Colors.blueGrey,
-    ).copyWith(
-      secondary: Colors.blueAccent,
     ),
     iconTheme: const IconThemeData(color: Colors.white),
     appBarTheme: const AppBarTheme(
