@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:ui';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -12,6 +16,45 @@ import 'repositories/event_repository.dart';
 import 'repositories/storage_repository.dart';
 import 'services/env.dart';
 import 'services/push_notification_service.dart';
+import 'services/platform_info.dart';
+
+void _reportGlobalError(Object error, StackTrace stackTrace) {
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'global_error_handler',
+      context: ErrorDescription('Erro global nao tratado'),
+    ),
+  );
+}
+
+void _configureGlobalErrorHandling() {
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+  };
+
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stackTrace) {
+    _reportGlobalError(error, stackTrace);
+    return true;
+  };
+
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Ocorreu um erro inesperado na interface.\nTente reiniciar o aplicativo.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  };
+}
 
 void _disableDebugPaintOverlays() {
   assert(() {
@@ -40,41 +83,78 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 ///
 /// Inicializa o Firebase, configura as opções de notificação e executa o app.
 ///
-/// O ícone/admin aparece somente quando ADMIN_MODE for exatamente 'admin'.
+/// ADMIN_MODE=admin libera o acesso administrativo sem exigir login.
 void main() async {
-  final isAdmin = Env.adminMode.toLowerCase() == 'admin';
+  await runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      _configureGlobalErrorHandling();
 
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+      final isAdmin = Env.adminMode.toLowerCase() == 'admin';
 
-  // Configura apresentação de notificações em foreground.
-  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-    alert: true,
-    badge: true,
-    sound: true,
+      try {
+        await Firebase.initializeApp();
+
+        // Configura apresentação de notificações em foreground.
+        await FirebaseMessaging.instance
+            .setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+
+        // Define o handler para mensagens em background.
+        FirebaseMessaging.onBackgroundMessage(
+          _firebaseMessagingBackgroundHandler,
+        );
+
+        _disableDebugPaintOverlays();
+
+        // Inicializa o app com MultiProvider para gerenciar estados globais.
+        runApp(
+          MultiProvider(
+            providers: [
+              Provider(create: (_) => EventRepository()),
+              Provider(create: (_) => StorageRepository()),
+              ChangeNotifierProvider(create: (_) => ThemeViewModel()),
+              ChangeNotifierProvider(
+                create: (context) => EventFeedViewModel(
+                  context.read<EventRepository>(),
+                ),
+              ),
+            ],
+            child: MainApp(isAdmin: isAdmin),
+          ),
+        );
+      } catch (error, stackTrace) {
+        _reportGlobalError(error, stackTrace);
+        runApp(const _BootstrapErrorApp());
+      }
+    },
+    _reportGlobalError,
   );
+}
 
-  // Define o handler para mensagens em background.
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+class _BootstrapErrorApp extends StatelessWidget {
+  const _BootstrapErrorApp();
 
-  _disableDebugPaintOverlays();
-
-  // Inicializa o app com MultiProvider para gerenciar estados globais.
-  runApp(
-    MultiProvider(
-      providers: [
-        Provider(create: (_) => EventRepository()),
-        Provider(create: (_) => StorageRepository()),
-        ChangeNotifierProvider(create: (_) => ThemeViewModel()),
-        ChangeNotifierProvider(
-          create: (context) => EventFeedViewModel(
-            context.read<EventRepository>(),
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Nao foi possivel inicializar o aplicativo.\nConfira a conexao com internet e servicos do Firebase.',
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
-      ],
-      child: MainApp(isAdmin: isAdmin),
-    ),
-  );
+      ),
+    );
+  }
 }
 
 /// Widget principal da aplicação.
@@ -110,12 +190,26 @@ class _MainAppState extends State<MainApp> {
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeViewModel>().themeMode;
 
+    if (isCupertinoPlatform) {
+      return CupertinoApp(
+        debugShowCheckedModeBanner: false,
+        theme: CupertinoThemeData(
+          brightness: Brightness.dark,
+          primaryColor: CupertinoColors.systemBlue,
+          barBackgroundColor: Color(0xFF121212),
+          scaffoldBackgroundColor: Colors.black,
+        ),
+        home: MainNavigationScreen(
+          isAdmin: widget.isAdmin,
+        ),
+      );
+    }
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
-      // Passa a flag isAdmin para a tela principal de navegação.
       home: MainNavigationScreen(
         isAdmin: widget.isAdmin,
       ),

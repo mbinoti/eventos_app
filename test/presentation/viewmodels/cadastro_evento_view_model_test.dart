@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:eventos_app/models/event.dart';
+import 'package:eventos_app/models/event_like_state.dart';
 import 'package:eventos_app/presentation/viewmodels/cadastro_evento_view_model.dart';
 import 'package:eventos_app/repositories/event_repository.dart';
 import 'package:eventos_app/repositories/storage_repository.dart';
@@ -28,6 +29,7 @@ class _FakeEventRepository implements EventRepository {
   String? cidade;
   String? descricao;
   DateTime? dataEvento;
+  DateTime? dataFimEvento;
   List<String>? imagemUrls;
 
   @override
@@ -40,10 +42,24 @@ class _FakeEventRepository implements EventRepository {
   Future<List<Event>> getEvents() async => [];
 
   @override
+  Future<EventLikeState> getEventLikeState(String id) async {
+    return const EventLikeState(likesCount: 0, isLiked: false);
+  }
+
+  @override
+  Future<EventLikeState> setEventLiked({
+    required String eventId,
+    required bool isLiked,
+  }) async {
+    return EventLikeState(likesCount: isLiked ? 1 : 0, isLiked: isLiked);
+  }
+
+  @override
   Future<void> createEvent({
     required String titulo,
     required String cidade,
     required DateTime dataEvento,
+    DateTime? dataFimEvento,
     required List<String> imagemUrls,
     String? descricao,
   }) async {
@@ -55,6 +71,7 @@ class _FakeEventRepository implements EventRepository {
     this.cidade = cidade;
     this.descricao = descricao;
     this.dataEvento = dataEvento;
+    this.dataFimEvento = dataFimEvento;
     this.imagemUrls = imagemUrls;
   }
 
@@ -97,6 +114,7 @@ void main() {
         titulo: ' Feira de Artes ',
         cidade: ' Sao Paulo ',
         dataEvento: DateTime(2026, 6, 1),
+        dataFimEvento: DateTime(2026, 6, 3),
         imagens: [File('/tmp/img1.jpg'), File('/tmp/img2.jpg')],
         descricao: 'Entrada gratuita',
       );
@@ -106,9 +124,35 @@ void main() {
       expect(eventRepository.titulo, 'Feira de Artes');
       expect(eventRepository.cidade, 'Sao Paulo');
       expect(eventRepository.descricao, 'Entrada gratuita');
+      expect(eventRepository.dataEvento, DateTime(2026, 6, 1));
+      expect(eventRepository.dataFimEvento, DateTime(2026, 6, 3));
       expect(eventRepository.imagemUrls, hasLength(2));
       expect(eventRepository.imagemUrls!.first, contains('img1.jpg'));
       expect(viewModel.isLoading, isFalse);
+    });
+
+    test('retorna false quando data de fim vem antes da data de inicio',
+        () async {
+      final eventRepository = _FakeEventRepository();
+      final viewModel = CadastroEventoViewModel(
+        storageRepository: _FakeStorageRepository(),
+        eventRepository: eventRepository,
+      );
+
+      final result = await viewModel.cadastrarEvento(
+        titulo: 'Feira de Artes',
+        cidade: 'Sao Paulo',
+        dataEvento: DateTime(2026, 6, 3),
+        dataFimEvento: DateTime(2026, 6, 1),
+        imagens: [File('/tmp/img1.jpg')],
+      );
+
+      expect(result, isFalse);
+      expect(
+        viewModel.errorMessage,
+        'A data de fim nao pode ser anterior a data de inicio.',
+      );
+      expect(eventRepository.titulo, isNull);
     });
 
     test('retorna false e expoe erro quando upload falha', () async {

@@ -2,10 +2,14 @@ import 'dart:io';
 
 import 'package:firebase_storage/firebase_storage.dart';
 
+import '../core/errors/app_exception.dart';
+import '../core/errors/error_mapper.dart';
+
 class StorageRepository {
   Future<String> uploadImagemComSeguranca(File imagemOriginal) async {
     if (imagemOriginal.path.isEmpty || !await imagemOriginal.exists()) {
-      throw Exception('Arquivo de imagem inválido ou não encontrado.');
+      throw AppException.validation(
+          'Arquivo de imagem invalido ou nao encontrado.');
     }
 
     final nomeArquivo = DateTime.now().millisecondsSinceEpoch.toString();
@@ -14,13 +18,19 @@ class StorageRepository {
 
     try {
       final metadata = SettableMetadata(contentType: 'image/jpeg');
-      final uploadTask = await ref.putFile(imagemOriginal, metadata);
+      await ref.putFile(imagemOriginal, metadata);
       final url = await ref.getDownloadURL();
-      print('✅ Upload realizado com sucesso: $url');
       return url;
-    } catch (e) {
-      print('❌ Erro no upload: $e');
-      throw Exception('Falha ao fazer upload da imagem.');
+    } on FirebaseException catch (exception) {
+      throw ErrorMapper.fromFirebaseException(
+        exception,
+        fallbackType: AppErrorType.storage,
+      );
+    } catch (error) {
+      throw ErrorMapper.fromObject(
+        error,
+        fallbackType: AppErrorType.storage,
+      );
     }
   }
 }

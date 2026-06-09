@@ -6,6 +6,7 @@ import '../../repositories/event_repository.dart';
 import '../../repositories/storage_repository.dart';
 import '../viewmodels/cadastro_evento_view_model.dart';
 import 'cadastro_evento_screen.dart';
+import '../../services/platform_info.dart';
 
 class AdminPanelScreen extends StatelessWidget {
   final bool isAdmin;
@@ -16,7 +17,7 @@ class AdminPanelScreen extends StatelessWidget {
   });
 
   Future<void> _openCadastro(BuildContext context) async {
-    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+    final isIOS = isCupertinoPlatform;
     final eventRepository = context.read<EventRepository>();
     final storageRepository = context.read<StorageRepository>();
 
@@ -42,7 +43,13 @@ class AdminPanelScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+    final isIOS = isCupertinoPlatform;
+    final titleStyle = isIOS
+        ? CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+            )
+        : Theme.of(context).textTheme.titleMedium;
 
     final body = Padding(
       padding: const EdgeInsets.all(16),
@@ -51,7 +58,7 @@ class AdminPanelScreen extends StatelessWidget {
         children: [
           Text(
             isAdmin ? 'Modo administrador ativo.' : 'Perfil de usuário.',
-            style: Theme.of(context).textTheme.titleMedium,
+            style: titleStyle,
           ),
           const SizedBox(height: 16),
           if (isAdmin)

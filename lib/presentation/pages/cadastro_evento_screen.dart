@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../viewmodels/cadastro_evento_view_model.dart';
+import '../../services/platform_info.dart';
 
 class CadastroEventoScreen extends StatefulWidget {
   const CadastroEventoScreen({super.key});
@@ -21,9 +22,10 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
   final _comentariosController = TextEditingController();
 
   DateTime? _dataEvento;
+  DateTime? _dataFimEvento;
   List<File> _imagensSelecionadas = [];
 
-  bool get _isIOS => Theme.of(context).platform == TargetPlatform.iOS;
+  bool get _isIOS => isCupertinoPlatform;
 
   @override
   void dispose() {
@@ -55,9 +57,53 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
     );
   }
 
-  Future<void> _selecionarData() async {
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  bool _isBeforeDate(DateTime first, DateTime second) {
+    return _dateOnly(first).isBefore(_dateOnly(second));
+  }
+
+  bool _isAfterDate(DateTime first, DateTime second) {
+    return _dateOnly(first).isAfter(_dateOnly(second));
+  }
+
+  void _setSelectedDate(DateTime date, {required bool isEndDate}) {
+    setState(() {
+      if (isEndDate) {
+        final startDate = _dataEvento;
+        _dataFimEvento =
+            startDate != null && !_isAfterDate(date, startDate) ? null : date;
+        return;
+      }
+
+      _dataEvento = date;
+      final endDate = _dataFimEvento;
+      if (endDate != null && !_isAfterDate(endDate, date)) {
+        _dataFimEvento = null;
+      }
+    });
+  }
+
+  Future<void> _selecionarData({required bool isEndDate}) async {
+    final firstDate =
+        isEndDate ? _dataEvento ?? DateTime(2024) : DateTime(2024);
+    final selectedDate = isEndDate ? _dataFimEvento : _dataEvento;
+    final fallbackDate =
+        isEndDate ? _dataEvento ?? DateTime.now() : DateTime.now();
+    final initialDate = _isBeforeDate(selectedDate ?? fallbackDate, firstDate)
+        ? firstDate
+        : selectedDate ?? fallbackDate;
+
     if (_isIOS) {
-      DateTime dataSelecionada = _dataEvento ?? DateTime.now();
+      DateTime dataSelecionada = initialDate;
 
       await showCupertinoModalPopup<void>(
         context: context,
@@ -72,7 +118,7 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   onPressed: () {
-                    setState(() => _dataEvento = dataSelecionada);
+                    _setSelectedDate(dataSelecionada, isEndDate: isEndDate);
                     Navigator.pop(context);
                   },
                   child: const Text('Concluir'),
@@ -81,8 +127,8 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
               Expanded(
                 child: CupertinoDatePicker(
                   mode: CupertinoDatePickerMode.date,
-                  initialDateTime: dataSelecionada,
-                  minimumDate: DateTime(2024),
+                  initialDateTime: initialDate,
+                  minimumDate: firstDate,
                   maximumDate: DateTime(2030),
                   onDateTimeChanged: (value) => dataSelecionada = value,
                 ),
@@ -96,12 +142,12 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
 
     final data = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2024),
+      initialDate: initialDate,
+      firstDate: firstDate,
       lastDate: DateTime(2030),
     );
     if (data != null) {
-      setState(() => _dataEvento = data);
+      _setSelectedDate(data, isEndDate: isEndDate);
     }
   }
 
@@ -136,6 +182,13 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
       return;
     }
 
+    final dataFimEvento = _dataFimEvento;
+    if (dataFimEvento != null && _isBeforeDate(dataFimEvento, _dataEvento!)) {
+      await _showMessage(
+          'A data de fim não pode ser anterior à data de início.');
+      return;
+    }
+
     if (_imagensSelecionadas.isEmpty) {
       await _showMessage('Selecione pelo menos uma imagem.');
       return;
@@ -147,6 +200,7 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
       titulo: _tituloController.text.trim(),
       cidade: _cidadeController.text.trim(),
       dataEvento: _dataEvento!,
+      dataFimEvento: dataFimEvento,
       imagens: _imagensSelecionadas,
       descricao: _comentariosController.text.trim(),
     );
@@ -198,6 +252,73 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
     );
   }
 
+  Widget _buildDateField({
+    required String title,
+    required String emptyText,
+    required String actionLabel,
+    required DateTime? value,
+    required VoidCallback onPressed,
+    VoidCallback? onClear,
+  }) {
+    final text = value == null ? emptyText : '$title: ${_formatDate(value)}';
+    final textStyle = _isIOS
+        ? CupertinoTheme.of(context).textTheme.navTitleTextStyle.copyWith(
+              fontSize: 16,
+            )
+        : Theme.of(context).textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            );
+
+    final clearButton = onClear == null
+        ? null
+        : _isIOS
+            ? CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                onPressed: onClear,
+                child: const Icon(CupertinoIcons.clear_circled),
+              )
+            : IconButton(
+                tooltip: 'Limpar data de fim',
+                icon: const Icon(Icons.close),
+                onPressed: onClear,
+              );
+
+    final selectButton = _isIOS
+        ? CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            onPressed: onPressed,
+            child: Text(actionLabel),
+          )
+        : OutlinedButton.icon(
+            onPressed: onPressed,
+            icon: const Icon(Icons.calendar_month),
+            label: Text(actionLabel),
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          text,
+          style: textStyle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: _isIOS ? Alignment.centerLeft : Alignment.centerRight,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (clearButton != null) clearButton,
+              selectButton,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildComentariosField() {
     if (_isIOS) {
       return CupertinoTextField(
@@ -244,31 +365,27 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      _dataEvento == null
-                          ? 'Selecione a data do evento'
-                          : 'Data: ${_dataEvento!.day}/${_dataEvento!.month}/${_dataEvento!.year}',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    _buildDateField(
+                      title: 'Início',
+                      emptyText: 'Selecione a data de início do evento',
+                      actionLabel: _dataEvento == null
+                          ? 'Data de início'
+                          : 'Alterar início',
+                      value: _dataEvento,
+                      onPressed: () => _selecionarData(isEndDate: false),
                     ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment:
-                          _isIOS ? Alignment.centerLeft : Alignment.centerRight,
-                      child: _isIOS
-                          ? CupertinoButton(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 8),
-                              onPressed: _selecionarData,
-                              child: const Text('Data'),
-                            )
-                          : ElevatedButton(
-                              onPressed: _selecionarData,
-                              child: const Text('Selecionar Data'),
-                            ),
+                    const SizedBox(height: 12),
+                    _buildDateField(
+                      title: 'Fim',
+                      emptyText: 'Sem data de fim',
+                      actionLabel: _dataFimEvento == null
+                          ? 'Data de fim'
+                          : 'Alterar fim',
+                      value: _dataFimEvento,
+                      onPressed: () => _selecionarData(isEndDate: true),
+                      onClear: _dataFimEvento == null
+                          ? null
+                          : () => setState(() => _dataFimEvento = null),
                     ),
                   ],
                 ),
@@ -347,7 +464,7 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                             onPressed: () => _submitForm(context),
                             child: const Text('Salvar Evento'),
                           )
-                        : ElevatedButton.icon(
+                        : FilledButton.icon(
                             onPressed: () => _submitForm(context),
                             icon: const Icon(Icons.save),
                             label: const Text('Salvar Evento'),

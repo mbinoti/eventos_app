@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flutter Mobile UI Adaptativa"
+  short_description: "Cria telas Flutter com Material 3 e Cupertino"
+  default_prompt: "Use $flutter-build-platform-adaptive-mobile-ui para criar ou adaptar uma tela mobile Flutter com Material 3, Cupertino/iOS ou widgets adaptativos."

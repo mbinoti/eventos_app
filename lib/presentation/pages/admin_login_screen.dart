@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/env.dart';
+import '../../services/platform_info.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -17,7 +18,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   String? _errorMessage;
 
-  bool get _isIOS => Theme.of(context).platform == TargetPlatform.iOS;
+  bool get _isIOS => isCupertinoPlatform;
 
   @override
   void dispose() {
@@ -122,6 +123,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final titleStyle = _isIOS
+        ? CupertinoTheme.of(context).textTheme.navTitleTextStyle
+        : Theme.of(context).textTheme.titleLarge;
+
     final content = AutofillGroup(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -132,7 +137,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             children: [
               Text(
                 'Acesso administrativo',
-                style: Theme.of(context).textTheme.titleLarge,
+                style: titleStyle,
               ),
               const SizedBox(height: 20),
               _buildUsuarioField(),

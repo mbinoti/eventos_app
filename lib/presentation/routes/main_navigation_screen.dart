@@ -1,12 +1,12 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../pages/event_feed_screen.dart';
+import '../../services/platform_info.dart';
 
 /// Tela principal de navegação da aplicação.
 ///
-/// Exibe as principais abas do app: feed de eventos, agenda e promoções.
+/// Exibe as principais abas do app: agenda e guia local.
 /// Recebe [isAdmin] para definir permissões administrativas nas telas filhas.
 class MainNavigationScreen extends StatelessWidget {
   /// Indica se o usuário é administrador.
@@ -46,13 +46,12 @@ class __MainNavigationScreenState extends State<_MainNavigationScreen> {
   /// Lista de telas exibidas nas abas.
   late final List<Widget> _screens = [
     EventFeedScreen(isAdmin: widget.isAdmin),
-    CalendarScreen(),
-    PromotionsScreen(),
+    LocalGuideScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+    final isIOS = isCupertinoPlatform;
 
     if (isIOS) {
       return CupertinoTabScaffold(
@@ -61,16 +60,12 @@ class __MainNavigationScreenState extends State<_MainNavigationScreen> {
           onTap: (index) => setState(() => _selectedIndex = index),
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.house_fill),
-              label: 'Eventos',
-            ),
-            BottomNavigationBarItem(
               icon: Icon(CupertinoIcons.calendar),
               label: 'Agenda',
             ),
             BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.speaker_2_fill),
-              label: 'Promocoes',
+              icon: Icon(CupertinoIcons.location_solid),
+              label: 'Guia Local',
             ),
           ],
         ),
@@ -90,22 +85,14 @@ class __MainNavigationScreenState extends State<_MainNavigationScreen> {
             setState(() => _selectedIndex = index),
         destinations: [
           const NavigationDestination(
-            icon: Icon(FontAwesomeIcons.house),
-            label: '',
-          ),
-          const NavigationDestination(
             icon: Icon(
               Icons.calendar_month,
             ),
-            label: '',
+            label: 'Agenda',
           ),
-          NavigationDestination(
-            icon: Image.asset(
-              'assets/icons/megaphone.png',
-              height: 24,
-              width: 24,
-            ),
-            label: '',
+          const NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            label: 'Guia local',
           ),
         ],
       ),
@@ -113,11 +100,11 @@ class __MainNavigationScreenState extends State<_MainNavigationScreen> {
   }
 }
 
-/// Tela da agenda de eventos.
+/// Tela de guia local.
 ///
-/// Exibe o conteúdo relacionado à agenda.
-class CalendarScreen extends StatelessWidget {
-  const CalendarScreen({super.key});
+/// Exibe o conteúdo relacionado a empresas e serviços locais.
+class LocalGuideScreen extends StatelessWidget {
+  const LocalGuideScreen({super.key});
 
   static const TextStyle _bodyStyle = TextStyle(
     inherit: false,
@@ -130,64 +117,24 @@ class CalendarScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+    final isIOS = isCupertinoPlatform;
     if (isIOS) {
       return const CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(
-          middle: Text('Agenda'),
+          middle: Text('Guia Local'),
         ),
         child: SafeArea(
           child: Center(
-            child: Text('Conteudo da agenda aqui', style: _bodyStyle),
+            child: Text('Conteudo do guia local aqui', style: _bodyStyle),
           ),
         ),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Agenda')),
+      appBar: AppBar(title: const Text('Guia Local')),
       body: const Center(
-        child: Text('Conteúdo da agenda aqui', style: _bodyStyle),
-      ),
-    );
-  }
-}
-
-/// Tela de promoções.
-///
-/// Exibe o conteúdo relacionado às promoções.
-class PromotionsScreen extends StatelessWidget {
-  const PromotionsScreen({super.key});
-
-  static const TextStyle _bodyStyle = TextStyle(
-    inherit: false,
-    color: Color(0xFFE0E0E0),
-    fontSize: 18,
-    fontWeight: FontWeight.w600,
-    decoration: TextDecoration.none,
-    decorationColor: Colors.transparent,
-  );
-
-  @override
-  Widget build(BuildContext context) {
-    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
-    if (isIOS) {
-      return const CupertinoPageScaffold(
-        navigationBar: CupertinoNavigationBar(
-          middle: Text('Promocoes'),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: Text('Conteudo de promocoes aqui', style: _bodyStyle),
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Promocoes')),
-      body: const Center(
-        child: Text('Conteúdo de promocoes aqui', style: _bodyStyle),
+        child: Text('Conteúdo do guia local aqui', style: _bodyStyle),
       ),
     );
   }

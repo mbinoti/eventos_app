@@ -2,7 +2,7 @@
 
 Documentos mantidos:
 
-- `project-context.md`: visão do produto, estado atual, público, jornadas e prioridades.
+- `project-context.md`: visão do produto, público, jornadas e prioridades.
 - `folder_structure.md`: estrutura simples do código e responsabilidade de cada pasta.
 
 Uso recomendado:
