@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
+  static final ColorScheme _darkColorScheme = ColorScheme.fromSeed(
+    seedColor: Colors.blueGrey,
+    brightness: Brightness.dark,
+  );
+
   static final ThemeData darkTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
     scaffoldBackgroundColor: Colors.black,
     cardColor: const Color(0xFF121212),
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: Colors.blueGrey,
-      brightness: Brightness.dark,
+    colorScheme: _darkColorScheme,
+    typography: Typography.material2021(
+      platform: TargetPlatform.android,
+      colorScheme: _darkColorScheme,
     ),
+    fontFamily: 'Roboto',
     iconTheme: const IconThemeData(color: Colors.white),
     appBarTheme: const AppBarTheme(
       backgroundColor: Color(0xFF121212),
@@ -19,10 +26,5 @@ class AppTheme {
       foregroundColor: Colors.white,
       iconTheme: IconThemeData(color: Colors.white),
     ),
-    textTheme: ThemeData.dark().textTheme.apply(
-          fontFamily: 'Roboto',
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
-        ),
   );
 }

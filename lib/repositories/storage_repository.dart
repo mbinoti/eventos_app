@@ -21,15 +21,17 @@ class StorageRepository {
       await ref.putFile(imagemOriginal, metadata);
       final url = await ref.getDownloadURL();
       return url;
-    } on FirebaseException catch (exception) {
+    } on FirebaseException catch (exception, stackTrace) {
       throw ErrorMapper.fromFirebaseException(
         exception,
         fallbackType: AppErrorType.storage,
+        stackTrace: stackTrace,
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       throw ErrorMapper.fromObject(
         error,
         fallbackType: AppErrorType.storage,
+        stackTrace: stackTrace,
       );
     }
   }

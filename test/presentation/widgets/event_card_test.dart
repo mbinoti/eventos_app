@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:eventos_app/app_theme.dart';
 import 'package:eventos_app/models/event.dart';
 import 'package:eventos_app/models/event_like_state.dart';
@@ -5,7 +7,6 @@ import 'package:eventos_app/presentation/widgets/event_card.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -112,6 +113,8 @@ void main() {
 
   testWidgets('detalhe concentra imagem grande descricao e acoes',
       (tester) async {
+    var editRequested = false;
+
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.darkTheme,
@@ -119,6 +122,10 @@ void main() {
           evento: event,
           isAdmin: true,
           onDelete: () async => true,
+          onEdit: () async {
+            editRequested = true;
+            return false;
+          },
         ),
       ),
     );
@@ -126,8 +133,16 @@ void main() {
     expect(find.text('Imagem do evento indisponível'), findsOneWidget);
     expect(find.text('9+'), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
-    expect(find.byType(FaIcon), findsOneWidget);
+    expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+
+    await tester.ensureVisible(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+
+    expect(editRequested, isTrue);
 
     await tester.scrollUntilVisible(
       find.text('Sobre o evento'),
@@ -137,6 +152,25 @@ void main() {
 
     expect(find.text('Sobre o evento'), findsOneWidget);
     expect(find.text(event.description), findsOneWidget);
+  });
+
+  testWidgets('oculta editar e excluir no detalhe sem acesso administrativo',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: EventDetailPage(
+          evento: event,
+          onDelete: () async => true,
+          onEdit: () async => true,
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
   });
 
   testWidgets('carrega curtida persistida ao abrir detalhe', (tester) async {
@@ -156,6 +190,123 @@ void main() {
 
     expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
+  });
+
+  testWidgets('atualiza curtida no detalhe a partir do stream', (tester) async {
+    final likeStateController = StreamController<EventLikeState>(sync: true);
+    addTearDown(likeStateController.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: EventDetailPage(
+          evento: event.copyWith(likesCount: 0, isLiked: false),
+          onWatchLikeState: () => likeStateController.stream,
+        ),
+      ),
+    );
+
+    await tester.ensureVisible(find.byIcon(Icons.favorite_border_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0'), findsNothing);
+    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+
+    likeStateController.add(
+      const EventLikeState(likesCount: 4, isLiked: false),
+    );
+    await tester.pump();
+
+    expect(find.text('4'), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+
+    likeStateController.add(
+      const EventLikeState(likesCount: 5, isLiked: true),
+    );
+    await tester.pump();
+
+    expect(find.text('5'), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+  });
+
+  testWidgets('atualiza dados do evento enquanto o detalhe esta aberto',
+      (tester) async {
+    final eventController = StreamController<Event?>(sync: true);
+    addTearDown(eventController.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: EventDetailPage(
+          evento: event,
+          onWatchEvent: () => eventController.stream,
+        ),
+      ),
+    );
+
+    expect(find.text(event.name), findsOneWidget);
+
+    eventController.add(
+      event.copyWith(
+        name: 'Festival atualizado em tempo real',
+        description: 'Nova descricao publicada em outro dispositivo.',
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text(event.name), findsNothing);
+    expect(find.text('Festival atualizado em tempo real'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Nova descricao publicada em outro dispositivo.'),
+      400,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(
+      find.text('Nova descricao publicada em outro dispositivo.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('fecha detalhe quando evento e excluido em outro dispositivo',
+      (tester) async {
+    final eventController = StreamController<Event?>(sync: true);
+    addTearDown(eventController.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                onPressed: () {
+                  Navigator.push<void>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EventDetailPage(
+                        evento: event,
+                        onWatchEvent: () => eventController.stream,
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Abrir detalhe'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Abrir detalhe'));
+    await tester.pumpAndSettle();
+    expect(find.text(event.name), findsOneWidget);
+
+    eventController.add(null);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Abrir detalhe'), findsOneWidget);
+    expect(find.text(event.name), findsNothing);
   });
 
   testWidgets('mostra contador somente depois da primeira curtida no detalhe',
@@ -250,15 +401,72 @@ void main() {
     await tester.ensureVisible(find.byIcon(Icons.favorite_border_rounded));
     await tester.pumpAndSettle();
 
-    final shareBefore = tester.getTopLeft(find.byType(FaIcon)).dx;
+    final shareBefore = tester.getTopLeft(find.byIcon(Icons.share_outlined)).dx;
     await tester.tap(find.byIcon(Icons.favorite_border_rounded));
     await tester.pumpAndSettle();
 
-    final shareAfter = tester.getTopLeft(find.byType(FaIcon)).dx;
+    final shareAfter = tester.getTopLeft(find.byIcon(Icons.share_outlined)).dx;
 
     expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
     expect(find.text('1'), findsOneWidget);
     expect(shareAfter, shareBefore);
+  });
+
+  testWidgets('fecha detalhe e volta para home apos excluir evento',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    var deleted = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Builder(
+          builder: (context) {
+            return Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.push<void>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => EventDetailPage(
+                          evento: event,
+                          isAdmin: true,
+                          onDelete: () async {
+                            deleted = true;
+                            return true;
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Abrir detalhe'),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Abrir detalhe'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Evento'), findsOneWidget);
+
+    await tester.ensureVisible(find.byIcon(Icons.delete_outline));
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Excluir'));
+    await tester.pumpAndSettle();
+
+    expect(deleted, isTrue);
+    expect(find.text('Abrir detalhe'), findsOneWidget);
+    expect(find.text('Evento'), findsNothing);
   });
 
   testWidgets(
@@ -291,7 +499,7 @@ void main() {
     expect(find.text('Compartilhar'), findsNothing);
     expect(find.text('Excluir'), findsNothing);
     expect(find.text('9+'), findsOneWidget);
-    expect(find.byType(FaIcon), findsOneWidget);
+    expect(find.byIcon(Icons.share_outlined), findsOneWidget);
     expect(find.byIcon(Icons.delete_outline), findsOneWidget);
   });
 
@@ -331,7 +539,7 @@ void main() {
 
       expect(find.byType(CupertinoButton), findsNWidgets(2));
       expect(find.byIcon(CupertinoIcons.heart), findsOneWidget);
-      expect(find.byType(FaIcon), findsOneWidget);
+      expect(find.byIcon(CupertinoIcons.share), findsOneWidget);
       expect(find.text('9+'), findsOneWidget);
     } finally {
       debugDefaultTargetPlatformOverride = null;

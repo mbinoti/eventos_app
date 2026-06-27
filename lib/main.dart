@@ -4,11 +4,14 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
 
 import 'app_theme.dart';
+import 'core/errors/error_logger.dart';
+import 'firebase_options.dart';
 import 'presentation/routes/main_navigation_screen.dart';
 import 'presentation/viewmodels/event_feed_view_model.dart';
 import 'presentation/viewmodels/theme_view_model.dart';
@@ -17,6 +20,19 @@ import 'repositories/storage_repository.dart';
 import 'services/env.dart';
 import 'services/push_notification_service.dart';
 import 'services/platform_info.dart';
+
+AppErrorLogger _appErrorLogger = const NoopErrorLogger();
+
+const _appLocale = Locale('pt', 'BR');
+const _supportedLocales = [
+  _appLocale,
+  Locale('pt'),
+];
+const _localizationsDelegates = [
+  GlobalMaterialLocalizations.delegate,
+  GlobalCupertinoLocalizations.delegate,
+  GlobalWidgetsLocalizations.delegate,
+];
 
 void _reportGlobalError(Object error, StackTrace stackTrace) {
   FlutterError.reportError(
@@ -29,9 +45,22 @@ void _reportGlobalError(Object error, StackTrace stackTrace) {
   );
 }
 
+void _logFlutterError(FlutterErrorDetails details) {
+  unawaited(
+    _appErrorLogger.log(
+      details.exception,
+      stackTrace: details.stack ?? StackTrace.current,
+      feature: 'flutter_framework',
+      operation: details.context?.toDescription() ?? 'framework_error',
+      fatal: true,
+    ),
+  );
+}
+
 void _configureGlobalErrorHandling() {
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
+    _logFlutterError(details);
   };
 
   PlatformDispatcher.instance.onError = (Object error, StackTrace stackTrace) {
@@ -93,15 +122,10 @@ void main() async {
       final isAdmin = Env.adminMode.toLowerCase() == 'admin';
 
       try {
-        await Firebase.initializeApp();
-
-        // Configura apresentação de notificações em foreground.
-        await FirebaseMessaging.instance
-            .setForegroundNotificationPresentationOptions(
-          alert: true,
-          badge: true,
-          sound: true,
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
         );
+        _appErrorLogger = FirestoreErrorLogger();
 
         // Define o handler para mensagens em background.
         FirebaseMessaging.onBackgroundMessage(
@@ -114,12 +138,18 @@ void main() async {
         runApp(
           MultiProvider(
             providers: [
-              Provider(create: (_) => EventRepository()),
+              Provider<AppErrorLogger>.value(value: _appErrorLogger),
+              Provider(
+                create: (_) => EventRepository(
+                  errorLogger: _appErrorLogger,
+                ),
+              ),
               Provider(create: (_) => StorageRepository()),
               ChangeNotifierProvider(create: (_) => ThemeViewModel()),
               ChangeNotifierProvider(
                 create: (context) => EventFeedViewModel(
                   context.read<EventRepository>(),
+                  errorLogger: context.read<AppErrorLogger>(),
                 ),
               ),
             ],
@@ -142,6 +172,9 @@ class _BootstrapErrorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      locale: _appLocale,
+      supportedLocales: _supportedLocales,
+      localizationsDelegates: _localizationsDelegates,
       home: Scaffold(
         body: Center(
           child: Padding(
@@ -180,9 +213,17 @@ class _MainAppState extends State<MainApp> {
     super.initState();
     // Inicializa o serviço de notificações push após o primeiro frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
       _disableDebugPaintOverlays();
       WidgetsBinding.instance.scheduleFrame();
-      PushNotificationService.initialize(context);
+      unawaited(
+        PushNotificationService.initialize(
+          errorLogger: context.read<AppErrorLogger>(),
+        ),
+      );
     });
   }
 
@@ -192,7 +233,11 @@ class _MainAppState extends State<MainApp> {
 
     if (isCupertinoPlatform) {
       return CupertinoApp(
+        navigatorKey: PushNotificationService.navigatorKey,
         debugShowCheckedModeBanner: false,
+        locale: _appLocale,
+        supportedLocales: _supportedLocales,
+        localizationsDelegates: _localizationsDelegates,
         theme: CupertinoThemeData(
           brightness: Brightness.dark,
           primaryColor: CupertinoColors.systemBlue,
@@ -206,7 +251,11 @@ class _MainAppState extends State<MainApp> {
     }
 
     return MaterialApp(
+      navigatorKey: PushNotificationService.navigatorKey,
       debugShowCheckedModeBanner: false,
+      locale: _appLocale,
+      supportedLocales: _supportedLocales,
+      localizationsDelegates: _localizationsDelegates,
       theme: AppTheme.darkTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,

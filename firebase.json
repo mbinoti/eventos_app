@@ -41,6 +41,16 @@
   "firestore": { "rules": "firestore.rules" },
   "storage":   { "rules": "storage.rules"   },
   "database":  { "rules": "database.rules.json" },
+  "functions": { "source": "functions" },
+  "hosting": {
+    "public": "web/admin",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "cleanUrls": true
+  },
 
   "emulators": {
     "auth":      { "port": 9099 },

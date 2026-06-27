@@ -1,12 +1,18 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../models/event.dart';
 import '../../models/event_like_state.dart';
 import '../../services/platform_info.dart';
+import 'cupertino_glass.dart';
 
 const _monthNames = <String>[
   'janeiro',
@@ -22,6 +28,7 @@ const _monthNames = <String>[
   'novembro',
   'dezembro',
 ];
+const _shareImageDownloadTimeout = Duration(seconds: 12);
 
 String _formatLongDate(DateTime date) {
   return '${date.day} de ${_monthNames[date.month - 1]} de ${date.year}';
@@ -82,6 +89,95 @@ ${_formatShortEventDate(event)}
 
 Confira mais no app Acontece Aqui.
 ''';
+}
+
+Uri? _eventImageUri(Event event) {
+  final imageUrl = event.imageUrl.trim();
+  if (imageUrl.isEmpty) {
+    return null;
+  }
+
+  final uri = Uri.tryParse(imageUrl);
+  if (uri == null || !uri.hasScheme) {
+    return null;
+  }
+
+  return uri.scheme == 'http' || uri.scheme == 'https' ? uri : null;
+}
+
+String _imageMimeTypeFrom(Uri uri, String? contentType) {
+  final normalizedContentType =
+      contentType?.split(';').first.trim().toLowerCase();
+  if (normalizedContentType != null &&
+      normalizedContentType.startsWith('image/')) {
+    return normalizedContentType;
+  }
+
+  final path = uri.path.toLowerCase();
+  if (path.endsWith('.png')) return 'image/png';
+  if (path.endsWith('.webp')) return 'image/webp';
+  if (path.endsWith('.gif')) return 'image/gif';
+  if (path.endsWith('.heic')) return 'image/heic';
+  if (path.endsWith('.jpeg') || path.endsWith('.jpg')) return 'image/jpeg';
+
+  return 'image/jpeg';
+}
+
+String _imageExtensionFor(String mimeType) {
+  return switch (mimeType) {
+    'image/png' => 'png',
+    'image/webp' => 'webp',
+    'image/gif' => 'gif',
+    'image/heic' => 'heic',
+    _ => 'jpg',
+  };
+}
+
+String _shareImageFileName(Event event, String mimeType) {
+  final sourceName = event.id.trim().isEmpty ? event.name : event.id;
+  final safeName = sourceName
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+  final baseName = safeName.isEmpty ? 'evento' : safeName;
+
+  return '$baseName.${_imageExtensionFor(mimeType)}';
+}
+
+Future<XFile?> _loadEventShareImage(Event event) async {
+  final uri = _eventImageUri(event);
+  if (uri == null) {
+    return null;
+  }
+
+  try {
+    final response = await http.get(uri).timeout(_shareImageDownloadTimeout);
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300 ||
+        response.bodyBytes.isEmpty) {
+      return null;
+    }
+
+    final mimeType = _imageMimeTypeFrom(uri, response.headers['content-type']);
+    final fileName = _shareImageFileName(event, mimeType);
+    final tempDirectory = await getTemporaryDirectory();
+    final shareDirectory = Directory('${tempDirectory.path}/eventos_share');
+    await shareDirectory.create(recursive: true);
+
+    final file = File(
+      '${shareDirectory.path}/${DateTime.now().microsecondsSinceEpoch}-$fileName',
+    );
+    await file.writeAsBytes(response.bodyBytes, flush: true);
+
+    return XFile(
+      file.path,
+      mimeType: mimeType,
+      name: fileName,
+      length: response.bodyBytes.length,
+    );
+  } catch (_) {
+    return null;
+  }
 }
 
 /// Exibe um evento como item compacto de agenda.
@@ -159,23 +255,21 @@ class _EventListItemContent extends StatelessWidget {
     final cityLabel = evento.location.trim().isEmpty
         ? 'Cidade não informada'
         : evento.location;
+    final image = SafeImageBox(
+      evento.imageUrl,
+      semanticLabel: 'Imagem de ${evento.name}',
+      width: 76,
+      height: 76,
+      fit: BoxFit.cover,
+      borderRadius: BorderRadius.circular(8),
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Hero(
-            tag: 'evento-${evento.id}',
-            child: SafeImageBox(
-              evento.imageUrl,
-              semanticLabel: 'Imagem de ${evento.name}',
-              width: 76,
-              height: 76,
-              fit: BoxFit.cover,
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
+          image,
           const SizedBox(width: 12),
           Expanded(
             child: Padding(
@@ -256,7 +350,7 @@ class _AdaptiveActionButton extends StatelessWidget {
   final String label;
   final Widget icon;
   final Color color;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -266,15 +360,13 @@ class _AdaptiveActionButton extends StatelessWidget {
     );
 
     if (isIOS) {
-      return Semantics(
-        label: label,
-        button: true,
-        child: CupertinoButton(
-          minimumSize: const Size.square(44),
-          padding: const EdgeInsets.all(10),
-          onPressed: onPressed,
-          child: iconContent,
-        ),
+      return CupertinoGlassButton(
+        semanticLabel: label,
+        minSize: 44,
+        padding: const EdgeInsets.all(10),
+        foregroundColor: color,
+        onPressed: onPressed,
+        child: iconContent,
       );
     }
 
@@ -380,23 +472,28 @@ class SafeImageBox extends StatelessWidget {
 
     final image = url.trim().isEmpty
         ? placeholder
-        : Image.network(
-            url,
-            semanticLabel: semanticLabel,
+        : CachedNetworkImage(
+            imageUrl: url,
             width: double.infinity,
             height: double.infinity,
             fit: fit,
             filterQuality: FilterQuality.high,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-
+            imageBuilder: (context, imageProvider) => Image(
+              image: imageProvider,
+              semanticLabel: semanticLabel,
+              width: double.infinity,
+              height: double.infinity,
+              fit: fit,
+              filterQuality: FilterQuality.high,
+            ),
+            progressIndicatorBuilder: (context, imageUrl, progress) {
               return Center(
                 child: isIOS
                     ? const CupertinoActivityIndicator()
                     : const CircularProgressIndicator(strokeWidth: 2),
               );
             },
-            errorBuilder: (context, error, stackTrace) => placeholder,
+            errorWidget: (context, imageUrl, error) => placeholder,
           );
 
     final imageFrame = ColoredBox(
@@ -570,15 +667,13 @@ class _SmallHeartAnimationState extends State<SmallHeartAnimation>
     );
 
     if (_isIOS) {
-      return Semantics(
-        label: _likesSemanticLabel,
-        button: true,
-        child: CupertinoButton(
-          minimumSize: const Size.square(44),
-          padding: const EdgeInsets.all(10),
-          onPressed: widget.isBusy ? null : _toggleFavorite,
-          child: content,
-        ),
+      return CupertinoGlassButton(
+        semanticLabel: _likesSemanticLabel,
+        minSize: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        foregroundColor: color,
+        onPressed: widget.isBusy ? null : _toggleFavorite,
+        child: content,
       );
     }
 
@@ -596,7 +691,10 @@ class EventDetailPage extends StatefulWidget {
   final Event evento;
   final bool isAdmin;
   final Future<bool> Function()? onDelete;
+  final Future<bool> Function()? onEdit;
   final Future<EventLikeState?> Function()? onLoadLikeState;
+  final Stream<Event?> Function()? onWatchEvent;
+  final Stream<EventLikeState> Function()? onWatchLikeState;
   final Future<EventLikeState?> Function(bool isLiked)? onLikeChanged;
   final String? Function()? likeErrorMessage;
 
@@ -605,7 +703,10 @@ class EventDetailPage extends StatefulWidget {
     required this.evento,
     this.isAdmin = false,
     this.onDelete,
+    this.onEdit,
     this.onLoadLikeState,
+    this.onWatchEvent,
+    this.onWatchLikeState,
     this.onLikeChanged,
     this.likeErrorMessage,
   });
@@ -615,28 +716,107 @@ class EventDetailPage extends StatefulWidget {
 }
 
 class _EventDetailPageState extends State<EventDetailPage> {
+  late Event _event;
   late int _likesCount;
   late bool _isLiked;
+  StreamSubscription<Event?>? _eventSubscription;
+  StreamSubscription<EventLikeState>? _likeStateSubscription;
   bool _isSyncingLike = false;
+  bool _isPreparingShare = false;
 
   bool get _isIOS => isCupertinoPlatform;
 
   @override
   void initState() {
     super.initState();
+    _event = widget.evento;
     _likesCount = widget.evento.likesCount;
     _isLiked = widget.evento.isLiked;
-    _loadLikeState();
+    _subscribeToEvent();
+    _subscribeToLikeState();
+    if (widget.onWatchLikeState == null) {
+      unawaited(_loadLikeState());
+    }
   }
 
   @override
   void didUpdateWidget(covariant EventDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.evento.id != widget.evento.id) {
+    if (oldWidget.evento != widget.evento) {
+      _event = widget.evento;
+    }
+    if (oldWidget.evento.id != widget.evento.id ||
+        oldWidget.onWatchEvent != widget.onWatchEvent) {
+      _subscribeToEvent();
+    }
+    if (oldWidget.evento.id != widget.evento.id ||
+        oldWidget.onWatchLikeState != widget.onWatchLikeState) {
       _likesCount = widget.evento.likesCount;
       _isLiked = widget.evento.isLiked;
-      _loadLikeState();
+      _subscribeToLikeState();
+      if (widget.onWatchLikeState == null) {
+        unawaited(_loadLikeState());
+      }
     }
+  }
+
+  void _subscribeToEvent() {
+    unawaited(_eventSubscription?.cancel());
+    _eventSubscription = null;
+
+    final watchEvent = widget.onWatchEvent;
+    if (watchEvent == null) {
+      return;
+    }
+
+    _eventSubscription = watchEvent().listen(
+      (event) {
+        if (!mounted) {
+          return;
+        }
+
+        if (event == null) {
+          Navigator.maybePop(context);
+          return;
+        }
+
+        setState(() => _event = event);
+      },
+      onError: (_) {},
+    );
+  }
+
+  void _subscribeToLikeState() {
+    unawaited(_likeStateSubscription?.cancel());
+    _likeStateSubscription = null;
+
+    final watchLikeState = widget.onWatchLikeState;
+    if (watchLikeState == null) {
+      return;
+    }
+
+    _likeStateSubscription = watchLikeState().listen(
+      _applyLikeState,
+      onError: (_) {
+        if (!mounted) {
+          return;
+        }
+
+        setState(() => _isSyncingLike = false);
+      },
+    );
+  }
+
+  void _applyLikeState(EventLikeState likeState) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _likesCount = likeState.likesCount;
+      _isLiked = likeState.isLiked;
+      _isSyncingLike = false;
+    });
   }
 
   Future<void> _showMessage(String message) async {
@@ -672,23 +852,69 @@ class _EventDetailPageState extends State<EventDetailPage> {
       return;
     }
 
-    setState(() {
-      _likesCount = loadedLikeState.likesCount;
-      _isLiked = loadedLikeState.isLiked;
-    });
+    _applyLikeState(loadedLikeState);
   }
 
-  Future<void> _shareEventOnWhatsApp() async {
-    final uri = Uri.https('wa.me', '/', {
-      'text': _buildEventShareText(widget.evento),
-    });
-    final launched = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
+  Rect? _sharePositionOrigin() {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return null;
+    }
 
-    if (!launched && mounted) {
-      await _showMessage('Não foi possível abrir o WhatsApp.');
+    return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+  }
+
+  Future<void> _shareEvent() async {
+    if (_isPreparingShare) {
+      return;
+    }
+
+    setState(() => _isPreparingShare = true);
+
+    final event = _event;
+    final shareText = _buildEventShareText(event);
+
+    try {
+      final shareImage = await _loadEventShareImage(event);
+      if (!mounted) {
+        return;
+      }
+
+      await SharePlus.instance.share(
+        ShareParams(
+          text: shareText,
+          subject: event.name,
+          title: 'Compartilhar evento',
+          files: shareImage == null ? null : [shareImage],
+          fileNameOverrides: shareImage == null ? null : [shareImage.name],
+          sharePositionOrigin: _sharePositionOrigin(),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      try {
+        await SharePlus.instance.share(
+          ShareParams(
+            text: shareText,
+            subject: event.name,
+            title: 'Compartilhar evento',
+            sharePositionOrigin: _sharePositionOrigin(),
+          ),
+        );
+      } catch (_) {
+        if (!mounted) {
+          return;
+        }
+
+        await _showMessage('Não foi possível abrir o compartilhamento.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPreparingShare = false);
+      }
     }
   }
 
@@ -796,6 +1022,20 @@ class _EventDetailPageState extends State<EventDetailPage> {
     }
   }
 
+  Future<void> _handleEdit() async {
+    final updated = await widget.onEdit?.call() ?? false;
+    if (updated && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_eventSubscription?.cancel());
+    unawaited(_likeStateSubscription?.cancel());
+    super.dispose();
+  }
+
   Widget _buildActions(BuildContext context) {
     final secondaryColor = _isIOS
         ? CupertinoColors.secondaryLabel.resolveFrom(context)
@@ -816,11 +1056,21 @@ class _EventDetailPageState extends State<EventDetailPage> {
         ),
         _AdaptiveActionButton(
           isIOS: _isIOS,
-          label: 'Compartilhar no WhatsApp',
-          icon: const FaIcon(FontAwesomeIcons.whatsapp),
-          color: secondaryColor,
-          onPressed: _shareEventOnWhatsApp,
+          label: 'Compartilhar evento',
+          icon: Icon(_isIOS ? CupertinoIcons.share : Icons.share_outlined),
+          color: _isPreparingShare
+              ? secondaryColor.withValues(alpha: 0.48)
+              : secondaryColor,
+          onPressed: _isPreparingShare ? null : _shareEvent,
         ),
+        if (widget.isAdmin && widget.onEdit != null)
+          _AdaptiveActionButton(
+            isIOS: _isIOS,
+            label: 'Editar',
+            icon: Icon(_isIOS ? CupertinoIcons.pencil : Icons.edit_outlined),
+            color: secondaryColor,
+            onPressed: _handleEdit,
+          ),
         if (widget.isAdmin && widget.onDelete != null)
           _AdaptiveActionButton(
             isIOS: _isIOS,
@@ -836,15 +1086,15 @@ class _EventDetailPageState extends State<EventDetailPage> {
   @override
   Widget build(BuildContext context) {
     final content = _EventDetailContent(
-      evento: widget.evento,
+      evento: _event,
       isIOS: _isIOS,
       actions: _buildActions(context),
     );
 
     if (_isIOS) {
       return CupertinoPageScaffold(
-        navigationBar: const CupertinoNavigationBar(
-          middle: Text('Evento'),
+        navigationBar: cupertinoGlassNavigationBar(
+          middle: const Text('Evento'),
         ),
         child: SafeArea(child: content),
       );
@@ -885,17 +1135,15 @@ class _EventDetailContent extends StatelessWidget {
             LayoutBuilder(
               builder: (context, constraints) {
                 final imageHeight = constraints.maxWidth >= 560 ? 420.0 : null;
-
-                return Hero(
-                  tag: 'evento-${evento.id}',
-                  child: SafeImageBox(
-                    evento.imageUrl,
-                    semanticLabel: 'Imagem de ${evento.name}',
-                    height: imageHeight,
-                    aspectRatio: 4 / 5,
-                    fit: BoxFit.cover,
-                  ),
+                final image = SafeImageBox(
+                  evento.imageUrl,
+                  semanticLabel: 'Imagem de ${evento.name}',
+                  height: imageHeight,
+                  aspectRatio: 4 / 5,
+                  fit: BoxFit.cover,
                 );
+
+                return image;
               },
             ),
             const SizedBox(height: 24),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/env.dart';
 import '../../services/platform_info.dart';
+import '../widgets/cupertino_glass.dart';
 
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
@@ -146,7 +147,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               _buildErrorMessage(),
               const SizedBox(height: 20),
               _isIOS
-                  ? CupertinoButton.filled(
+                  ? CupertinoGlassButton(
+                      isProminent: true,
                       onPressed: _submit,
                       child: const Text('Entrar'),
                     )
@@ -163,8 +165,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
     if (_isIOS) {
       return CupertinoPageScaffold(
-        navigationBar: const CupertinoNavigationBar(
-          middle: Text('Login'),
+        navigationBar: cupertinoGlassNavigationBar(
+          middle: const Text('Login'),
         ),
         child: SafeArea(child: content),
       );

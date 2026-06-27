@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:eventos_app/app_theme.dart';
@@ -15,6 +16,8 @@ class _FakeEventRepository implements EventRepository {
   _FakeEventRepository({this.events = const []});
 
   final List<Event> events;
+  Event? updatedEvent;
+  final deletedEventIds = <String>[];
 
   @override
   Future<void> addEvent(Event event) async {}
@@ -30,10 +33,31 @@ class _FakeEventRepository implements EventRepository {
   }) async {}
 
   @override
-  Future<void> deleteEvent(String id) async {}
+  Future<void> deleteEvent(String id) async {
+    deletedEventIds.add(id);
+  }
 
   @override
   Future<List<Event>> getEvents() async => events;
+
+  @override
+  Stream<List<Event>> watchEvents() => Stream.value(events);
+
+  @override
+  Stream<Event?> watchEvent(String eventId) => Stream.value(
+        events.firstWhere((event) => event.id == eventId),
+      );
+
+  @override
+  Stream<EventLikeState> watchEventLikeState(String eventId) {
+    final event = events.firstWhere((event) => event.id == eventId);
+    return Stream.value(
+      EventLikeState(
+        likesCount: event.likesCount,
+        isLiked: event.isLiked,
+      ),
+    );
+  }
 
   @override
   Future<EventLikeState> getEventLikeState(String id) async {
@@ -57,7 +81,9 @@ class _FakeEventRepository implements EventRepository {
   }
 
   @override
-  Future<void> updateEvent(Event event) async {}
+  Future<void> updateEvent(Event event) async {
+    updatedEvent = event;
+  }
 }
 
 class _FakeStorageRepository implements StorageRepository {
@@ -65,6 +91,19 @@ class _FakeStorageRepository implements StorageRepository {
   Future<String> uploadImagemComSeguranca(File imagemOriginal) async {
     return 'https://fake.storage/${imagemOriginal.path.split('/').last}';
   }
+}
+
+class _RealtimeFakeEventRepository extends _FakeEventRepository {
+  _RealtimeFakeEventRepository({required super.events});
+
+  final _controller = StreamController<List<Event>>();
+
+  void emit(List<Event> events) => _controller.add(events);
+
+  Future<void> close() => _controller.close();
+
+  @override
+  Stream<List<Event>> watchEvents() => _controller.stream;
 }
 
 void main() {
@@ -91,6 +130,16 @@ void main() {
     ),
   ];
 
+  Future<void> loginAsAdmin(WidgetTester tester) async {
+    await tester.tap(find.text('Login'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'admin');
+    await tester.enterText(find.byType(TextFormField).at(1), 'admin');
+    await tester.tap(find.text('Entrar'));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('apresenta a agenda e os eventos em ordem de leitura',
       (tester) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -108,9 +157,16 @@ void main() {
             isIOS: false,
             onRefresh: () async {},
             onDeleteEvent: (_) async => true,
+            onEditEvent: (_) async => true,
             onLoadLikeState: (_) async => const EventLikeState(
               likesCount: 0,
               isLiked: false,
+            ),
+            onWatchLikeState: (_) => Stream.value(
+              const EventLikeState(
+                likesCount: 0,
+                isLiked: false,
+              ),
             ),
             onLikeEvent: (_, isLiked) async => EventLikeState(
               likesCount: isLiked ? 1 : 0,
@@ -141,6 +197,52 @@ void main() {
     expect(find.text('Cinema na Praça'), findsOneWidget);
   });
 
+  testWidgets('aceita eventos com ids repetidos sem conflito de Hero',
+      (tester) async {
+    final duplicateIdEvents = [
+      events[0].copyWith(id: 'evento-repetido'),
+      events[1].copyWith(id: 'evento-repetido'),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: EventFeedList(
+            events: duplicateIdEvents,
+            isAdmin: false,
+            isIOS: false,
+            onRefresh: () async {},
+            onDeleteEvent: (_) async => true,
+            onEditEvent: (_) async => true,
+            onLoadLikeState: (_) async => const EventLikeState(
+              likesCount: 0,
+              isLiked: false,
+            ),
+            onWatchLikeState: (_) => Stream.value(
+              const EventLikeState(
+                likesCount: 0,
+                isLiked: false,
+              ),
+            ),
+            onLikeEvent: (_, isLiked) async => EventLikeState(
+              likesCount: isLiked ? 1 : 0,
+              isLiked: isLiked,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text('Festival Gastronômico Sabores da Serra'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('abre detalhe do evento ao tocar na lista', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -152,9 +254,16 @@ void main() {
             isIOS: false,
             onRefresh: () async {},
             onDeleteEvent: (_) async => true,
+            onEditEvent: (_) async => true,
             onLoadLikeState: (_) async => const EventLikeState(
               likesCount: 0,
               isLiked: false,
+            ),
+            onWatchLikeState: (_) => Stream.value(
+              const EventLikeState(
+                likesCount: 0,
+                isLiked: false,
+              ),
             ),
             onLikeEvent: (_, isLiked) async => EventLikeState(
               likesCount: isLiked ? 1 : 0,
@@ -182,6 +291,42 @@ void main() {
     expect(find.text('Imagem do evento indisponível'), findsOneWidget);
   });
 
+  testWidgets('fecha detalhe quando o feed remoto remove o evento',
+      (tester) async {
+    final eventRepository = _RealtimeFakeEventRepository(events: events);
+    addTearDown(eventRepository.close);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<EventRepository>.value(value: eventRepository),
+          Provider<StorageRepository>.value(
+            value: _FakeStorageRepository(),
+          ),
+          ChangeNotifierProvider<EventFeedViewModel>(
+            create: (_) => EventFeedViewModel(eventRepository),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.darkTheme,
+          home: const EventFeedScreen(isAdmin: false),
+        ),
+      ),
+    );
+
+    eventRepository.emit(events);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(events.first.name));
+    await tester.pumpAndSettle();
+    expect(find.text('Evento'), findsOneWidget);
+
+    eventRepository.emit([events.last]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Evento'), findsNothing);
+    expect(find.text('Eventos para descobrir'), findsOneWidget);
+  });
+
   testWidgets('sincroniza curtida a partir do detalhe aberto pela lista',
       (tester) async {
     bool? requestedLikeState;
@@ -196,9 +341,16 @@ void main() {
             isIOS: false,
             onRefresh: () async {},
             onDeleteEvent: (_) async => true,
+            onEditEvent: (_) async => true,
             onLoadLikeState: (_) async => const EventLikeState(
               likesCount: 2,
               isLiked: false,
+            ),
+            onWatchLikeState: (_) => Stream.value(
+              const EventLikeState(
+                likesCount: 2,
+                isLiked: false,
+              ),
             ),
             onLikeEvent: (_, isLiked) async {
               requestedLikeState = isLiked;
@@ -227,8 +379,7 @@ void main() {
     expect(find.text('3'), findsOneWidget);
   });
 
-  testWidgets('mantem login visivel e abre cadastro apos autenticar',
-      (tester) async {
+  testWidgets('permanece no feed apos autenticar pelo login', (tester) async {
     final eventRepository = _FakeEventRepository(events: events);
 
     await tester.pumpWidget(
@@ -251,15 +402,162 @@ void main() {
     expect(find.text('Login'), findsOneWidget);
     expect(find.byIcon(Icons.login), findsOneWidget);
 
-    await tester.tap(find.text('Login'));
+    await loginAsAdmin(tester);
+
+    expect(find.text('Cadastrar Evento'), findsNothing);
+    expect(find.text('Título'), findsNothing);
+    expect(find.text('Novo'), findsOneWidget);
+    expect(find.byIcon(Icons.add), findsOneWidget);
+    expect(find.text('Sair'), findsNothing);
+    expect(find.byIcon(Icons.logout), findsOneWidget);
+    expect(find.text('Festival Gastronômico Sabores da Serra'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.logout));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextFormField).at(0), 'admin');
-    await tester.enterText(find.byType(TextFormField).at(1), 'admin');
-    await tester.tap(find.text('Entrar'));
+    expect(find.text('Login'), findsOneWidget);
+    expect(find.byIcon(Icons.login), findsOneWidget);
+    expect(find.text('Novo'), findsNothing);
+    expect(find.byIcon(Icons.add), findsNothing);
+    expect(find.text('Sair'), findsNothing);
+    expect(find.byIcon(Icons.logout), findsNothing);
+  });
+
+  testWidgets('oculta acoes administrativas no detalhe sem login',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final eventRepository = _FakeEventRepository(events: events);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<EventRepository>.value(value: eventRepository),
+          Provider<StorageRepository>.value(value: _FakeStorageRepository()),
+          ChangeNotifierProvider<EventFeedViewModel>(
+            create: (_) => EventFeedViewModel(eventRepository),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.darkTheme,
+          home: const EventFeedScreen(isAdmin: false),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Festival Gastronômico Sabores da Serra'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Cadastrar Evento'), findsOneWidget);
-    expect(find.text('Título'), findsOneWidget);
+    expect(find.text('Evento'), findsOneWidget);
+    expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
+  });
+
+  testWidgets('edita evento a partir da tela de detalhes depois de autenticar',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final eventRepository = _FakeEventRepository(events: events);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<EventRepository>.value(value: eventRepository),
+          Provider<StorageRepository>.value(value: _FakeStorageRepository()),
+          ChangeNotifierProvider<EventFeedViewModel>(
+            create: (_) => EventFeedViewModel(eventRepository),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.darkTheme,
+          home: const EventFeedScreen(isAdmin: false),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await loginAsAdmin(tester);
+    await tester.tap(find.text('Festival Gastronômico Sabores da Serra'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Evento'), findsOneWidget);
+    await tester.ensureVisible(find.byIcon(Icons.edit_outlined));
+    expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Editar Evento'), findsOneWidget);
+    expect(find.text('Substituir Imagem'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'Festival novo');
+    await tester.enterText(find.byType(TextFormField).at(1), 'Nova Cidade');
+    await tester.enterText(find.byType(TextFormField).at(2), 'Nova descrição');
+    await tester.scrollUntilVisible(
+      find.text('Salvar Alterações'),
+      400,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Salvar Alterações'));
+    await tester.pumpAndSettle();
+
+    expect(eventRepository.updatedEvent, isNotNull);
+    expect(eventRepository.updatedEvent!.id, 'festival-gastronomico-2026');
+    expect(eventRepository.updatedEvent!.name, 'Festival novo');
+    expect(eventRepository.updatedEvent!.location, 'Nova Cidade');
+    expect(eventRepository.updatedEvent!.description, 'Nova descrição');
+    expect(find.text('Editar Evento'), findsNothing);
+    expect(find.text('Acontece Aqui'), findsOneWidget);
+  });
+
+  testWidgets('mantem excluir no detalhe depois de autenticar', (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final eventRepository = _FakeEventRepository(events: events);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<EventRepository>.value(value: eventRepository),
+          Provider<StorageRepository>.value(value: _FakeStorageRepository()),
+          ChangeNotifierProvider<EventFeedViewModel>(
+            create: (_) => EventFeedViewModel(eventRepository),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.darkTheme,
+          home: const EventFeedScreen(isAdmin: false),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await loginAsAdmin(tester);
+    await tester.tap(find.text('Festival Gastronômico Sabores da Serra'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byIcon(Icons.delete_outline));
+    expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Excluir'));
+    await tester.pumpAndSettle();
+
+    expect(eventRepository.deletedEventIds, ['festival-gastronomico-2026']);
+    expect(find.text('Evento'), findsNothing);
+    expect(find.text('Acontece Aqui'), findsOneWidget);
   });
 }

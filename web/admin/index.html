@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eventos Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="min-h-screen bg-[#f6f7fb] text-[#17202a]">
+    <div class="admin-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">E</div>
+          <div>
+            <p class="brand-kicker">Painel</p>
+            <h1>Eventos Admin</h1>
+          </div>
+        </div>
+
+        <nav class="nav-stack" aria-label="Navegacao principal">
+          <a href="#eventos" class="nav-item active">Eventos</a>
+          <a href="#push" class="nav-item">Push</a>
+          <a href="#recentes" class="nav-item">Recentes</a>
+        </nav>
+
+        <div class="sidebar-note">
+          <p>Status Firebase</p>
+          <strong id="firebaseStatus">Conectando...</strong>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <section class="topbar">
+          <div>
+            <p class="eyebrow">Cadastro e comunicados</p>
+            <h2>Controle dos eventos do app</h2>
+          </div>
+          <button id="refreshEvents" class="icon-button" type="button" title="Atualizar eventos">
+            Atualizar
+          </button>
+        </section>
+
+        <section class="stats-grid" aria-label="Resumo">
+          <article class="stat-card">
+            <span>Eventos futuros</span>
+            <strong id="futureCount">0</strong>
+          </article>
+          <article class="stat-card">
+            <span>Ultimo cadastro</span>
+            <strong id="lastEventDate">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>Push</span>
+            <strong id="lastPushStatus">Pronto</strong>
+          </article>
+        </section>
+
+        <div class="workspace-grid">
+          <section id="eventos" class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Novo evento</p>
+                <h3>Cadastrar no Firebase</h3>
+              </div>
+            </div>
+
+            <form id="eventForm" class="form-stack">
+              <label>
+                <span>Titulo</span>
+                <input id="titulo" name="titulo" type="text" required maxlength="90" />
+              </label>
+
+              <div class="form-row">
+                <label>
+                  <span>Cidade</span>
+                  <input id="cidade" name="cidade" type="text" required maxlength="80" />
+                </label>
+                <label>
+                  <span>Imagem</span>
+                  <input id="imagem" name="imagem" type="file" accept="image/*" />
+                </label>
+              </div>
+
+              <div class="form-row">
+                <label>
+                  <span>Inicio</span>
+                  <input id="dataEvento" name="dataEvento" type="datetime-local" required />
+                </label>
+                <label>
+                  <span>Fim</span>
+                  <input id="dataFimEvento" name="dataFimEvento" type="datetime-local" />
+                </label>
+              </div>
+
+              <label>
+                <span>Descricao</span>
+                <textarea id="descricao" name="descricao" rows="5" maxlength="900"></textarea>
+              </label>
+
+              <label class="check-line">
+                <input id="sendPushAfterCreate" type="checkbox" />
+                <span>Enviar push depois de cadastrar</span>
+              </label>
+
+              <div id="eventPushFields" class="push-fields hidden">
+                <label>
+                  <span>Titulo do push</span>
+                  <input id="eventPushTitle" type="text" maxlength="80" />
+                </label>
+                <label>
+                  <span>Mensagem do push</span>
+                  <textarea id="eventPushBody" rows="3" maxlength="240"></textarea>
+                </label>
+              </div>
+
+              <button id="saveEventButton" class="primary-button" type="submit">
+                Salvar evento
+              </button>
+            </form>
+          </section>
+
+          <section id="push" class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Notificacao</p>
+                <h3>Enviar push</h3>
+              </div>
+            </div>
+
+            <form id="pushForm" class="form-stack">
+              <label>
+                <span>Titulo</span>
+                <input id="pushTitle" type="text" required maxlength="80" />
+              </label>
+              <label>
+                <span>Mensagem</span>
+                <textarea id="pushBody" required rows="5" maxlength="240"></textarea>
+              </label>
+              <label>
+                <span>Evento vinculado</span>
+                <select id="pushEventId">
+                  <option value="">Sem evento especifico</option>
+                </select>
+              </label>
+              <button id="sendPushButton" class="secondary-button" type="submit">
+                Criar envio
+              </button>
+            </form>
+          </section>
+        </div>
+
+        <section id="recentes" class="panel recent-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Firestore</p>
+              <h3>Eventos recentes</h3>
+            </div>
+          </div>
+          <div id="eventsList" class="events-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

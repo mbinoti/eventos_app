@@ -2,14 +2,22 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/event.dart';
 import '../viewmodels/cadastro_evento_view_model.dart';
+import '../widgets/cupertino_glass.dart';
 import '../../services/platform_info.dart';
 
 class CadastroEventoScreen extends StatefulWidget {
-  const CadastroEventoScreen({super.key});
+  const CadastroEventoScreen({
+    super.key,
+    this.eventoInicial,
+  });
+
+  final Event? eventoInicial;
 
   @override
   State<CadastroEventoScreen> createState() => _CadastroEventoScreenState();
@@ -26,6 +34,22 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
   List<File> _imagensSelecionadas = [];
 
   bool get _isIOS => isCupertinoPlatform;
+  bool get _isEditing => widget.eventoInicial != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final evento = widget.eventoInicial;
+    if (evento == null) {
+      return;
+    }
+
+    _tituloController.text = evento.name;
+    _cidadeController.text = evento.location;
+    _comentariosController.text = evento.description;
+    _dataEvento = evento.date;
+    _dataFimEvento = evento.endDate;
+  }
 
   @override
   void dispose() {
@@ -75,6 +99,11 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
     return _dateOnly(first).isAfter(_dateOnly(second));
   }
 
+  DateTime _today() {
+    final now = DateTime.now();
+    return _dateOnly(now);
+  }
+
   void _setSelectedDate(DateTime date, {required bool isEndDate}) {
     setState(() {
       if (isEndDate) {
@@ -93,8 +122,12 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
   }
 
   Future<void> _selecionarData({required bool isEndDate}) async {
-    final firstDate =
-        isEndDate ? _dataEvento ?? DateTime(2024) : DateTime(2024);
+    final today = _today();
+    final firstDate = isEndDate
+        ? _dataEvento ?? (_isEditing ? DateTime(2024) : today)
+        : _isEditing
+            ? DateTime(2024)
+            : today;
     final selectedDate = isEndDate ? _dataFimEvento : _dataEvento;
     final fallbackDate =
         isEndDate ? _dataEvento ?? DateTime.now() : DateTime.now();
@@ -115,8 +148,10 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: CupertinoButton(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   onPressed: () {
                     _setSelectedDate(dataSelecionada, isEndDate: isEndDate);
                     Navigator.pop(context);
@@ -151,7 +186,7 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
     }
   }
 
-  Future<void> _selecionarImagens() async {
+  Future<void> _selecionarImagensDaGaleria() async {
     final picker = ImagePicker();
     final pickedFiles = await picker.pickMultiImage();
 
@@ -161,6 +196,58 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
     } else {
       await _showMessage('Nenhuma imagem foi selecionada.');
     }
+  }
+
+  Future<void> _selecionarImagensDosArquivos() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'heic'],
+      allowMultiple: true,
+    );
+
+    final paths = result?.paths.whereType<String>().toList() ?? [];
+    if (paths.isNotEmpty) {
+      setState(() => _imagensSelecionadas = paths.map(File.new).toList());
+    } else {
+      await _showMessage('Nenhuma imagem foi selecionada.');
+    }
+  }
+
+  Future<void> _selecionarImagens() async {
+    if (_isIOS) {
+      await _selecionarImagensDaGaleria();
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Fotos'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _selecionarImagensDaGaleria();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_open_outlined),
+                title: const Text('Arquivos'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _selecionarImagensDosArquivos();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _submitForm(BuildContext context) async {
@@ -182,6 +269,12 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
       return;
     }
 
+    if (!_isEditing && _isBeforeDate(_dataEvento!, _today())) {
+      await _showMessage(
+          'A data de início não pode ser anterior à data de hoje.');
+      return;
+    }
+
     final dataFimEvento = _dataFimEvento;
     if (dataFimEvento != null && _isBeforeDate(dataFimEvento, _dataEvento!)) {
       await _showMessage(
@@ -189,21 +282,32 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
       return;
     }
 
-    if (_imagensSelecionadas.isEmpty) {
+    if (!_isEditing && _imagensSelecionadas.isEmpty) {
       await _showMessage('Selecione pelo menos uma imagem.');
       return;
     }
 
     final cadastroViewModel = context.read<CadastroEventoViewModel>();
 
-    final success = await cadastroViewModel.cadastrarEvento(
-      titulo: _tituloController.text.trim(),
-      cidade: _cidadeController.text.trim(),
-      dataEvento: _dataEvento!,
-      dataFimEvento: dataFimEvento,
-      imagens: _imagensSelecionadas,
-      descricao: _comentariosController.text.trim(),
-    );
+    final eventoInicial = widget.eventoInicial;
+    final success = eventoInicial == null
+        ? await cadastroViewModel.cadastrarEvento(
+            titulo: _tituloController.text.trim(),
+            cidade: _cidadeController.text.trim(),
+            dataEvento: _dataEvento!,
+            dataFimEvento: dataFimEvento,
+            imagens: _imagensSelecionadas,
+            descricao: _comentariosController.text.trim(),
+          )
+        : await cadastroViewModel.atualizarEvento(
+            evento: eventoInicial,
+            titulo: _tituloController.text.trim(),
+            cidade: _cidadeController.text.trim(),
+            dataEvento: _dataEvento!,
+            dataFimEvento: dataFimEvento,
+            novasImagens: _imagensSelecionadas,
+            descricao: _comentariosController.text.trim(),
+          );
 
     if (!context.mounted) return;
 
@@ -214,7 +318,7 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
 
     final error = cadastroViewModel.errorMessage;
     if (error != null && error.isNotEmpty) {
-      await _showMessage('Erro: $error');
+      await _showMessage(error);
     }
   }
 
@@ -346,6 +450,10 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
   Widget build(BuildContext context) {
     final backgroundColor =
         _isIOS ? CupertinoColors.systemBackground.resolveFrom(context) : null;
+    final title = _isEditing ? 'Editar Evento' : 'Cadastrar Evento';
+    final saveLabel = _isEditing ? 'Salvar Alterações' : 'Salvar Evento';
+    final imageActionLabel =
+        _isEditing ? 'Substituir Imagem' : 'Selecionar Imagens';
 
     return Consumer<CadastroEventoViewModel>(
       builder: (context, viewModel, _) {
@@ -393,6 +501,7 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: _imagensSelecionadas.asMap().entries.map((entry) {
                     final index = entry.key;
                     final file = entry.value;
@@ -435,15 +544,35 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                     );
                   }).toList(),
                 ),
+                if (_isEditing &&
+                    _imagensSelecionadas.isEmpty &&
+                    (widget.eventoInicial?.imageUrl.trim().isNotEmpty ?? false))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Imagem atual mantida. Selecione outra para substituir.',
+                      style: _isIOS
+                          ? CupertinoTheme.of(context)
+                              .textTheme
+                              .textStyle
+                              .copyWith(
+                                color: CupertinoColors.secondaryLabel
+                                    .resolveFrom(context),
+                              )
+                          : Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
                 _isIOS
                     ? CupertinoButton(
+                        alignment: Alignment.centerLeft,
+                        padding: EdgeInsets.zero,
                         onPressed: _selecionarImagens,
-                        child: const Text('Selecionar Imagens'),
+                        child: Text(imageActionLabel),
                       )
                     : TextButton.icon(
                         onPressed: _selecionarImagens,
                         icon: const Icon(Icons.image),
-                        label: const Text('Selecionar Imagens'),
+                        label: Text(imageActionLabel),
                       ),
                 const SizedBox(height: 12),
                 ConstrainedBox(
@@ -460,14 +589,15 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
                             : const CircularProgressIndicator(),
                       )
                     : _isIOS
-                        ? CupertinoButton.filled(
+                        ? CupertinoGlassButton(
+                            isProminent: true,
                             onPressed: () => _submitForm(context),
-                            child: const Text('Salvar Evento'),
+                            child: Text(saveLabel),
                           )
                         : FilledButton.icon(
                             onPressed: () => _submitForm(context),
                             icon: const Icon(Icons.save),
-                            label: const Text('Salvar Evento'),
+                            label: Text(saveLabel),
                           ),
               ],
             ),
@@ -476,8 +606,8 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
 
         if (_isIOS) {
           return CupertinoPageScaffold(
-            navigationBar: const CupertinoNavigationBar(
-              middle: Text('Cadastrar Evento'),
+            navigationBar: cupertinoGlassNavigationBar(
+              middle: Text(title),
             ),
             child: SafeArea(child: content),
           );
@@ -485,7 +615,7 @@ class _CadastroEventoScreenState extends State<CadastroEventoScreen> {
 
         return Scaffold(
           backgroundColor: backgroundColor,
-          appBar: AppBar(title: const Text('Cadastrar Evento')),
+          appBar: AppBar(title: Text(title)),
           body: content,
         );
       },

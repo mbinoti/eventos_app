@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/errors/error_logger.dart';
 import '../../models/event.dart';
 import '../../models/event_like_state.dart';
 import '../../repositories/event_repository.dart';
@@ -9,6 +10,7 @@ import '../../repositories/storage_repository.dart';
 import '../../services/platform_info.dart';
 import '../viewmodels/cadastro_evento_view_model.dart';
 import '../viewmodels/event_feed_view_model.dart';
+import '../widgets/cupertino_glass.dart';
 import '../widgets/event_card.dart';
 import 'admin_login_screen.dart';
 import 'cadastro_evento_screen.dart';
@@ -67,19 +69,21 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _openCadastro(
+  Future<bool> _openCadastro(
     BuildContext context,
     EventFeedViewModel feedViewModel,
     EventRepository eventRepository,
-    StorageRepository storageRepository,
-  ) async {
+    StorageRepository storageRepository, {
+    Event? eventoInicial,
+  }) async {
     final isIOS = isCupertinoPlatform;
     final page = ChangeNotifierProvider(
       create: (_) => CadastroEventoViewModel(
         storageRepository: storageRepository,
         eventRepository: eventRepository,
+        errorLogger: _readErrorLogger(context),
       ),
-      child: const CadastroEventoScreen(),
+      child: CadastroEventoScreen(eventoInicial: eventoInicial),
     );
 
     final result = await Navigator.push(
@@ -91,6 +95,17 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
 
     if (result == true) {
       feedViewModel.loadEvents();
+      return true;
+    }
+
+    return false;
+  }
+
+  AppErrorLogger? _readErrorLogger(BuildContext context) {
+    try {
+      return context.read<AppErrorLogger>();
+    } catch (_) {
+      return null;
     }
   }
 
@@ -122,8 +137,9 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
     EventRepository eventRepository,
     StorageRepository storageRepository,
   ) async {
+    final hadAdminAccess = _hasAdminAccess;
     final canManageEvents = await _authenticateIfNeeded(context);
-    if (canManageEvents && context.mounted) {
+    if (hadAdminAccess && canManageEvents && context.mounted) {
       await _openCadastro(
         context,
         feedViewModel,
@@ -131,6 +147,150 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
         storageRepository,
       );
     }
+  }
+
+  void _logOut() {
+    if (!_hasAdminAccess) {
+      return;
+    }
+
+    setState(() => _hasAdminAccess = false);
+  }
+
+  Widget _buildCupertinoAdminAction({
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool isProminent = false,
+    bool showLabel = true,
+    Color? foregroundColor,
+  }) {
+    return CupertinoGlassButton(
+      minSize: 36,
+      padding: showLabel
+          ? const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 7,
+            )
+          : const EdgeInsets.all(9),
+      borderRadius: BorderRadius.circular(18),
+      isProminent: isProminent,
+      foregroundColor: foregroundColor,
+      semanticLabel: label,
+      onPressed: onPressed,
+      child: showLabel
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16),
+                const SizedBox(width: 5),
+                Text(label),
+              ],
+            )
+          : Icon(icon, size: 18),
+    );
+  }
+
+  Widget _buildCupertinoNavigationActions(
+    BuildContext context,
+    EventFeedViewModel feedViewModel,
+    EventRepository eventRepository,
+    StorageRepository storageRepository,
+  ) {
+    if (!_hasAdminAccess) {
+      return _buildCupertinoAdminAction(
+        label: 'Login',
+        icon: CupertinoIcons.person_crop_circle,
+        onPressed: () => _openAdminAccess(
+          context,
+          feedViewModel,
+          eventRepository,
+          storageRepository,
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildCupertinoAdminAction(
+          label: 'Novo',
+          icon: CupertinoIcons.add,
+          isProminent: true,
+          onPressed: () => _openAdminAccess(
+            context,
+            feedViewModel,
+            eventRepository,
+            storageRepository,
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildCupertinoAdminAction(
+          label: 'Sair do login administrativo',
+          icon: CupertinoIcons.square_arrow_right,
+          showLabel: false,
+          foregroundColor: CupertinoColors.secondaryLabel.resolveFrom(context),
+          onPressed: _logOut,
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildMaterialAppBarActions(
+    BuildContext context,
+    EventFeedViewModel feedViewModel,
+    EventRepository eventRepository,
+    StorageRepository storageRepository,
+  ) {
+    final foregroundColor = Theme.of(context).appBarTheme.foregroundColor;
+    final buttonStyle = TextButton.styleFrom(
+      foregroundColor: foregroundColor,
+    );
+
+    if (!_hasAdminAccess) {
+      return [
+        Tooltip(
+          message: 'Entrar para cadastrar eventos',
+          child: TextButton.icon(
+            style: buttonStyle,
+            onPressed: () => _openAdminAccess(
+              context,
+              feedViewModel,
+              eventRepository,
+              storageRepository,
+            ),
+            icon: const Icon(Icons.login),
+            label: const Text('Login'),
+          ),
+        ),
+      ];
+    }
+
+    return [
+      Tooltip(
+        message: 'Cadastrar evento',
+        child: TextButton.icon(
+          style: buttonStyle,
+          onPressed: () => _openAdminAccess(
+            context,
+            feedViewModel,
+            eventRepository,
+            storageRepository,
+          ),
+          icon: const Icon(Icons.add),
+          label: const Text('Novo'),
+        ),
+      ),
+      Tooltip(
+        message: 'Sair do login administrativo',
+        child: IconButton(
+          onPressed: _logOut,
+          icon: const Icon(Icons.logout),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+      const SizedBox(width: 8),
+    ];
   }
 
   @override
@@ -143,6 +303,11 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
     return Consumer<EventFeedViewModel>(
       builder: (context, viewModel, _) {
         Future<bool> handleDelete(String eventId) async {
+          final canManageEvents = await _authenticateIfNeeded(context);
+          if (!canManageEvents || !context.mounted) {
+            return false;
+          }
+
           final success = await viewModel.deleteEvent(eventId);
           if (!success && context.mounted) {
             final message = viewModel.errorMessage ??
@@ -153,28 +318,42 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
           return success;
         }
 
+        Future<bool> handleEdit(Event event) async {
+          final canManageEvents = await _authenticateIfNeeded(context);
+          if (!canManageEvents || !context.mounted) {
+            return false;
+          }
+
+          return _openCadastro(
+            context,
+            viewModel,
+            eventRepository,
+            storageRepository,
+            eventoInicial: event,
+          );
+        }
+
         final content = _FeedContent(
           viewModel: viewModel,
           isAdmin: _hasAdminAccess,
           isIOS: isIOS,
           onDeleteEvent: handleDelete,
+          onEditEvent: handleEdit,
           onLoadLikeState: viewModel.getEventLikeState,
+          onWatchEvent: viewModel.watchEvent,
+          onWatchLikeState: viewModel.watchEventLikeState,
           onLikeEvent: viewModel.setEventLiked,
         );
 
         if (isIOS) {
           return CupertinoPageScaffold(
-            navigationBar: CupertinoNavigationBar(
-              middle: Text(_appTitle),
-              trailing: CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: () => _openAdminAccess(
-                  context,
-                  feedViewModel,
-                  eventRepository,
-                  storageRepository,
-                ),
-                child: Text(_hasAdminAccess ? 'Novo' : 'Login'),
+            navigationBar: cupertinoGlassNavigationBar(
+              middle: const Text(_appTitle),
+              trailing: _buildCupertinoNavigationActions(
+                context,
+                feedViewModel,
+                eventRepository,
+                storageRepository,
               ),
             ),
             child: SafeArea(child: content),
@@ -192,29 +371,12 @@ class _EventFeedScreenState extends State<EventFeedScreen> {
                 fontSize: 22,
               ),
             ),
-            actions: [
-              Tooltip(
-                message: _hasAdminAccess
-                    ? 'Cadastrar evento'
-                    : 'Entrar para cadastrar eventos',
-                child: TextButton.icon(
-                  style: TextButton.styleFrom(
-                    foregroundColor:
-                        Theme.of(context).appBarTheme.foregroundColor,
-                  ),
-                  onPressed: () => _openAdminAccess(
-                    context,
-                    feedViewModel,
-                    eventRepository,
-                    storageRepository,
-                  ),
-                  icon: Icon(
-                    _hasAdminAccess ? Icons.add : Icons.login,
-                  ),
-                  label: Text(_hasAdminAccess ? 'Novo' : 'Login'),
-                ),
-              ),
-            ],
+            actions: _buildMaterialAppBarActions(
+              context,
+              feedViewModel,
+              eventRepository,
+              storageRepository,
+            ),
           ),
           body: content,
         );
@@ -228,7 +390,10 @@ class _FeedContent extends StatelessWidget {
   final bool isAdmin;
   final bool isIOS;
   final Future<bool> Function(String eventId) onDeleteEvent;
+  final Future<bool> Function(Event event) onEditEvent;
   final Future<EventLikeState?> Function(String eventId) onLoadLikeState;
+  final Stream<Event?> Function(String eventId) onWatchEvent;
+  final Stream<EventLikeState> Function(String eventId) onWatchLikeState;
   final Future<EventLikeState?> Function(String eventId, bool isLiked)
       onLikeEvent;
 
@@ -237,7 +402,10 @@ class _FeedContent extends StatelessWidget {
     required this.isAdmin,
     required this.isIOS,
     required this.onDeleteEvent,
+    required this.onEditEvent,
     required this.onLoadLikeState,
+    required this.onWatchEvent,
+    required this.onWatchLikeState,
     required this.onLikeEvent,
   });
 
@@ -276,7 +444,10 @@ class _FeedContent extends StatelessWidget {
       isIOS: isIOS,
       onRefresh: viewModel.loadEvents,
       onDeleteEvent: onDeleteEvent,
+      onEditEvent: onEditEvent,
       onLoadLikeState: onLoadLikeState,
+      onWatchEvent: onWatchEvent,
+      onWatchLikeState: onWatchLikeState,
       onLikeEvent: onLikeEvent,
     );
   }
@@ -290,7 +461,10 @@ class EventFeedList extends StatelessWidget {
     required this.isIOS,
     required this.onRefresh,
     required this.onDeleteEvent,
+    required this.onEditEvent,
     required this.onLoadLikeState,
+    this.onWatchEvent,
+    required this.onWatchLikeState,
     required this.onLikeEvent,
   });
 
@@ -299,7 +473,10 @@ class EventFeedList extends StatelessWidget {
   final bool isIOS;
   final Future<void> Function() onRefresh;
   final Future<bool> Function(String eventId) onDeleteEvent;
+  final Future<bool> Function(Event event) onEditEvent;
   final Future<EventLikeState?> Function(String eventId) onLoadLikeState;
+  final Stream<Event?> Function(String eventId)? onWatchEvent;
+  final Stream<EventLikeState> Function(String eventId) onWatchLikeState;
   final Future<EventLikeState?> Function(String eventId, bool isLiked)
       onLikeEvent;
 
@@ -310,7 +487,11 @@ class EventFeedList extends StatelessWidget {
         evento: event,
         isAdmin: isAdmin,
         onDelete: () => onDeleteEvent(event.id),
+        onEdit: () => onEditEvent(event),
         onLoadLikeState: () => onLoadLikeState(event.id),
+        onWatchEvent:
+            onWatchEvent == null ? null : () => onWatchEvent!(event.id),
+        onWatchLikeState: () => onWatchLikeState(event.id),
         onLikeChanged: (isLiked) => onLikeEvent(event.id, isLiked),
         likeErrorMessage: () =>
             context.read<EventFeedViewModel>().likeErrorMessage,
@@ -345,7 +526,7 @@ class EventFeedList extends StatelessWidget {
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, isIOS ? 96 : 32),
           sliver: SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -468,7 +649,8 @@ class _RefreshableFeedState extends StatelessWidget {
               Text(message, style: styles.body),
               const SizedBox(height: 20),
               isIOS
-                  ? CupertinoButton.filled(
+                  ? CupertinoGlassButton(
+                      isProminent: true,
                       onPressed: onRefresh,
                       child: Text(actionLabel),
                     )

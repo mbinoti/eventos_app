@@ -10,17 +10,26 @@ class ErrorMapper {
   static AppException fromObject(
     Object error, {
     AppErrorType fallbackType = AppErrorType.unknown,
+    StackTrace? stackTrace,
   }) {
     if (error is AppException) {
-      return error;
+      return error.withStackTrace(stackTrace);
     }
 
     if (error is FirebaseException) {
-      return fromFirebaseException(error, fallbackType: fallbackType);
+      return fromFirebaseException(
+        error,
+        fallbackType: fallbackType,
+        stackTrace: stackTrace,
+      );
     }
 
     if (error is PlatformException) {
-      return _fromPlatformException(error, fallbackType: fallbackType);
+      return _fromPlatformException(
+        error,
+        fallbackType: fallbackType,
+        stackTrace: stackTrace,
+      );
     }
 
     if (error is SocketException || error is TimeoutException) {
@@ -30,23 +39,23 @@ class ErrorMapper {
             'Sem conexao com a internet no momento. Verifique sua rede e tente novamente.',
         technicalMessage: error.toString(),
         cause: error,
+        stackTrace: stackTrace,
       );
     }
 
-    final knownMessage = _extractKnownMessage(error);
-
     return AppException(
       type: fallbackType,
-      userMessage: knownMessage ??
-          'Ocorreu um erro inesperado. Tente novamente em instantes.',
+      userMessage: fallbackMessageFor(fallbackType),
       technicalMessage: error.toString(),
       cause: error,
+      stackTrace: stackTrace,
     );
   }
 
   static AppException fromFirebaseException(
     FirebaseException exception, {
     AppErrorType fallbackType = AppErrorType.unknown,
+    StackTrace? stackTrace,
   }) {
     final code = exception.code.toLowerCase();
 
@@ -58,6 +67,7 @@ class ErrorMapper {
         technicalMessage:
             'FirebaseException(${exception.code}): ${exception.message}',
         cause: exception,
+        stackTrace: stackTrace,
       );
     }
 
@@ -69,6 +79,7 @@ class ErrorMapper {
         technicalMessage:
             'FirebaseException(${exception.code}): ${exception.message}',
         cause: exception,
+        stackTrace: stackTrace,
       );
     }
 
@@ -79,29 +90,42 @@ class ErrorMapper {
         technicalMessage:
             'FirebaseException(${exception.code}): ${exception.message}',
         cause: exception,
+        stackTrace: stackTrace,
       );
     }
 
-    final fallbackMessage = switch (fallbackType) {
-      AppErrorType.database =>
-        'Nao foi possivel acessar os dados agora. Tente novamente em instantes.',
-      AppErrorType.storage =>
-        'Nao foi possivel processar o upload do arquivo no momento.',
-      _ => 'Ocorreu um erro inesperado. Tente novamente em instantes.',
-    };
-
     return AppException(
       type: fallbackType,
-      userMessage: fallbackMessage,
+      userMessage: fallbackMessageFor(fallbackType),
       technicalMessage:
           'FirebaseException(${exception.code}): ${exception.message}',
       cause: exception,
+      stackTrace: stackTrace,
     );
+  }
+
+  static String fallbackMessageFor(AppErrorType type) {
+    return switch (type) {
+      AppErrorType.network =>
+        'Sem conexao com a internet no momento. Verifique sua rede e tente novamente.',
+      AppErrorType.database =>
+        'Nao foi possivel acessar os dados agora. Tente novamente em instantes.',
+      AppErrorType.storage =>
+        'Nao foi possivel enviar a imagem agora. Tente novamente em instantes.',
+      AppErrorType.validation =>
+        'Revise os dados informados e tente novamente.',
+      AppErrorType.permission =>
+        'Voce nao tem permissao para realizar esta acao. Fale com o administrador.',
+      AppErrorType.notFound => 'O recurso solicitado nao foi encontrado.',
+      AppErrorType.unknown =>
+        'Ocorreu um erro inesperado. Tente novamente em instantes.',
+    };
   }
 
   static AppException _fromPlatformException(
     PlatformException exception, {
     required AppErrorType fallbackType,
+    StackTrace? stackTrace,
   }) {
     final code = exception.code.toLowerCase();
     final message = exception.message ?? '';
@@ -113,14 +137,16 @@ class ErrorMapper {
             'Nao foi possivel iniciar um servico interno do app. Feche o aplicativo e abra novamente.',
         technicalMessage: 'PlatformException(${exception.code}): $message',
         cause: exception,
+        stackTrace: stackTrace,
       );
     }
 
     return AppException(
       type: fallbackType,
-      userMessage: 'Ocorreu um erro inesperado. Tente novamente em instantes.',
+      userMessage: fallbackMessageFor(fallbackType),
       technicalMessage: 'PlatformException(${exception.code}): $message',
       cause: exception,
+      stackTrace: stackTrace,
     );
   }
 
@@ -128,25 +154,5 @@ class ErrorMapper {
     'network-request-failed',
     'unavailable',
     'deadline-exceeded',
-    'failed-precondition',
   };
-
-  static String? _extractKnownMessage(Object error) {
-    final raw = error.toString().trim();
-    if (raw.isEmpty) {
-      return null;
-    }
-
-    if (raw.startsWith('Exception:')) {
-      final message = raw.replaceFirst('Exception:', '').trim();
-      return message.isNotEmpty ? message : null;
-    }
-
-    if (raw.startsWith('Error:')) {
-      final message = raw.replaceFirst('Error:', '').trim();
-      return message.isNotEmpty ? message : null;
-    }
-
-    return raw;
-  }
 }

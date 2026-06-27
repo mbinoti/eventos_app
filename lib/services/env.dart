@@ -19,6 +19,14 @@ class Env {
     'USE_FIREBASE_EMULATORS',
     defaultValue: false,
   );
+  static const buildNumber = String.fromEnvironment(
+    'BUILD_NUMBER',
+    defaultValue: 'local',
+  );
+  static const gitSha = String.fromEnvironment(
+    'GIT_SHA',
+    defaultValue: 'unknown',
+  );
 
   static bool get isDev => flavor == 'dev';
   static bool get isProd => flavor == 'prod';

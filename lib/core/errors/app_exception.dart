@@ -47,6 +47,20 @@ class AppException implements Exception {
     );
   }
 
+  AppException withStackTrace(StackTrace? fallbackStackTrace) {
+    if (stackTrace != null || fallbackStackTrace == null) {
+      return this;
+    }
+
+    return AppException(
+      type: type,
+      userMessage: userMessage,
+      technicalMessage: technicalMessage,
+      cause: cause,
+      stackTrace: fallbackStackTrace,
+    );
+  }
+
   @override
   String toString() => userMessage;
 }

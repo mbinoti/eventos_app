@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../repositories/event_repository.dart';
 import '../../repositories/storage_repository.dart';
+import '../widgets/cupertino_glass.dart';
 import '../viewmodels/cadastro_evento_view_model.dart';
 import 'cadastro_evento_screen.dart';
 import '../../services/platform_info.dart';
@@ -63,7 +64,8 @@ class AdminPanelScreen extends StatelessWidget {
           const SizedBox(height: 16),
           if (isAdmin)
             isIOS
-                ? CupertinoButton.filled(
+                ? CupertinoGlassButton(
+                    isProminent: true,
                     onPressed: () => _openCadastro(context),
                     child: const Text('Cadastrar novo evento'),
                   )
@@ -78,8 +80,8 @@ class AdminPanelScreen extends StatelessWidget {
 
     if (isIOS) {
       return CupertinoPageScaffold(
-        navigationBar: const CupertinoNavigationBar(
-          middle: Text('Perfil'),
+        navigationBar: cupertinoGlassNavigationBar(
+          middle: const Text('Perfil'),
         ),
         child: SafeArea(child: body),
       );

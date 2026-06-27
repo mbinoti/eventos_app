@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../pages/event_feed_screen.dart';
+import '../widgets/cupertino_glass.dart';
 import '../../services/platform_info.dart';
 
 /// Tela principal de navegação da aplicação.
@@ -54,22 +55,34 @@ class __MainNavigationScreenState extends State<_MainNavigationScreen> {
     final isIOS = isCupertinoPlatform;
 
     if (isIOS) {
-      return CupertinoTabScaffold(
-        tabBar: CupertinoTabBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) => setState(() => _selectedIndex = index),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.calendar),
-              label: 'Agenda',
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: _screens,
             ),
-            BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.location_solid),
-              label: 'Guia Local',
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: CupertinoGlassTabBar(
+              selectedIndex: _selectedIndex,
+              onSelected: (index) => setState(() => _selectedIndex = index),
+              items: const [
+                CupertinoGlassTabItem(
+                  icon: CupertinoIcons.calendar,
+                  label: 'Agenda',
+                ),
+                CupertinoGlassTabItem(
+                  icon: CupertinoIcons.location_solid,
+                  label: 'Guia Local',
+                ),
+              ],
             ),
-          ],
-        ),
-        tabBuilder: (context, index) => _screens[index],
+          ),
+        ],
       );
     }
 
@@ -119,11 +132,11 @@ class LocalGuideScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isIOS = isCupertinoPlatform;
     if (isIOS) {
-      return const CupertinoPageScaffold(
-        navigationBar: CupertinoNavigationBar(
-          middle: Text('Guia Local'),
+      return CupertinoPageScaffold(
+        navigationBar: cupertinoGlassNavigationBar(
+          middle: const Text('Guia Local'),
         ),
-        child: SafeArea(
+        child: const SafeArea(
           child: Center(
             child: Text('Conteudo do guia local aqui', style: _bodyStyle),
           ),
